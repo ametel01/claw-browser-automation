@@ -1,0 +1,24 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Artifacts & runtime state
+artifacts/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.*
+!.env.example
