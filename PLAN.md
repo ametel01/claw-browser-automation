@@ -123,9 +123,9 @@ claw-browser-automation/
 ### 0.1 Init & Dependencies
 
 ```bash
-pnpm init
-pnpm add playwright-core better-sqlite3 pino nanoid
-pnpm add -D typescript @types/node @types/better-sqlite3 @biomejs/biome vitest
+bun init
+bun add playwright-core better-sqlite3 pino nanoid
+bun add -D typescript @types/node @types/better-sqlite3 @biomejs/biome vitest
 ```
 
 ### 0.2 Biome — Strict Linting & Formatting
@@ -133,7 +133,7 @@ pnpm add -D typescript @types/node @types/better-sqlite3 @biomejs/biome vitest
 Set up Biome with strict rules from the start. No tech debt accumulation.
 
 ```bash
-pnpm biome init
+bun biome init
 ```
 
 `biome.json`:
@@ -252,7 +252,7 @@ Notable strict flags beyond `"strict": true`:
 }
 ```
 
-All code must pass `pnpm check` before commit. No exceptions.
+All code must pass `bun check` before commit. No exceptions.
 
 ---
 
