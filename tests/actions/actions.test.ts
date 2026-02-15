@@ -8,6 +8,7 @@ import { navigate } from "../../src/actions/navigate.js";
 import { getPageState, screenshot, scroll } from "../../src/actions/page.js";
 import { waitForSelector } from "../../src/actions/wait.js";
 import { createLogger } from "../../src/observe/logger.js";
+import { ActionTrace } from "../../src/observe/trace.js";
 import type { SelectorStrategy } from "../../src/selectors/strategy.js";
 
 const log = createLogger("test-actions");
@@ -230,5 +231,23 @@ describe("Action Engine", () => {
 
 		const { rmSync } = await import("node:fs");
 		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it("should record action trace entries when trace context is provided", async () => {
+		await setup("<p id='msg'>Trace target</p>");
+		const trace = new ActionTrace();
+		ctx.trace = trace;
+		ctx.sessionId = "trace-session";
+
+		const success = await getText(ctx, "#msg", { retries: 0 });
+		expect(success.ok).toBe(true);
+		const failure = await getText(ctx, "#missing", { retries: 0, timeout: 100 });
+		expect(failure.ok).toBe(false);
+
+		const sessionTrace = trace.getSessionTrace("trace-session");
+		expect(sessionTrace).toHaveLength(2);
+		expect(sessionTrace[0]?.ok).toBe(true);
+		expect(sessionTrace[1]?.ok).toBe(false);
+		expect(trace.stats().actionsTotal).toBe(2);
 	});
 });

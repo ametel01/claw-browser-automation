@@ -478,7 +478,7 @@ CREATE TABLE action_log (
 
 ---
 
-## Phase 4 — Observability
+## Phase 4 — Observability **COMPLETE**
 
 > Goal: When something breaks, know exactly what happened.
 

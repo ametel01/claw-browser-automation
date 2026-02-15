@@ -1,5 +1,6 @@
 import type { Page } from "playwright-core";
 import type { Logger } from "../observe/logger.js";
+import type { ActionTrace } from "../observe/trace.js";
 import { PopupDismisser } from "./resilience.js";
 
 export interface ActionResult<T = unknown> {
@@ -33,6 +34,8 @@ export interface ActionContext {
 	page: Page;
 	logger: Logger;
 	screenshotDir?: string;
+	sessionId?: string;
+	trace?: ActionTrace;
 }
 
 export interface ActionOptions {
@@ -85,11 +88,18 @@ export async function executeAction<T>(
 				await popupDismisser.dismissOnce();
 				const outcome = await runAttempt(ctx, opts, fn, timeoutMs);
 				if (outcome.tag === "success") {
+					const durationMs = Math.round(performance.now() - startedAt);
+					recordTraceEntry(ctx, name, {
+						timestamp: Date.now(),
+						durationMs,
+						ok: true,
+						retries: attempt,
+					});
 					return {
 						ok: true,
 						data: outcome.data,
 						retries: attempt,
-						durationMs: Math.round(performance.now() - startedAt),
+						durationMs,
 					};
 				}
 				lastError = outcome.error;
@@ -137,7 +147,38 @@ async function buildFailureResult<T>(
 	}
 
 	ctx.logger.error({ action: name, error: lastError, retries: maxRetries }, "action failed");
+	recordTraceEntry(ctx, name, {
+		timestamp: Date.now(),
+		durationMs: result.durationMs,
+		ok: false,
+		...(result.error ? { error: result.error } : {}),
+		retries: result.retries,
+	});
 	return result;
+}
+
+function recordTraceEntry(
+	ctx: ActionContext,
+	action: string,
+	entry: {
+		timestamp: number;
+		durationMs: number;
+		ok: boolean;
+		error?: string;
+		retries: number;
+	},
+): void {
+	if (!(ctx.trace && ctx.sessionId)) {
+		return;
+	}
+	ctx.trace.record(ctx.sessionId, {
+		action,
+		timestamp: entry.timestamp,
+		durationMs: entry.durationMs,
+		ok: entry.ok,
+		...(entry.error ? { error: entry.error } : {}),
+		retries: entry.retries,
+	});
 }
 
 async function backoff(attempt: number): Promise<void> {
