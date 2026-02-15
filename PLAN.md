@@ -434,7 +434,7 @@ When given a `SelectorStrategy[]`, the engine tries each in order. This means th
 
 ---
 
-## Phase 3 — State Persistence & Artifacts
+## Phase 3 — State Persistence & Artifacts **COMPLETE**
 
 > Goal: Survive crashes. Keep evidence of everything.
 
