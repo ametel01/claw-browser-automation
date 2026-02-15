@@ -574,7 +574,7 @@ export default {
 
 ---
 
-## Phase 6 — Integration Tests
+## Phase 6 — Integration Tests ✅
 
 > Goal: Prove reliability before trusting it with real tasks.
 

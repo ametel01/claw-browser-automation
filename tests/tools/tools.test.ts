@@ -295,7 +295,8 @@ describe("Tool definitions", () => {
 			const actionTools = createActionTools(ctx);
 			const pageTools = createPageTools(ctx);
 			const approvalTools = createApprovalTools(ctx);
-			const total = sessionTools.length + actionTools.length + pageTools.length + approvalTools.length;
+			const total =
+				sessionTools.length + actionTools.length + pageTools.length + approvalTools.length;
 			expect(total).toBe(19);
 		});
 
