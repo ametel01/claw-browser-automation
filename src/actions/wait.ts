@@ -21,7 +21,7 @@ export async function waitForSelector(
 
 export async function waitForCondition(
 	ctx: ActionContext,
-	condition: () => boolean | Promise<boolean>,
+	condition: string | (() => boolean | Promise<boolean>),
 	opts: ActionOptions = {},
 ): Promise<ActionResult<void>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
