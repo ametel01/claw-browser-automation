@@ -49,7 +49,10 @@ export function createLogger(name: string) {
 			append: true,
 		});
 
-		return pino(baseOptions, pino.multistream([{ stream: process.stdout }, { stream: fileStream }]));
+		return pino(
+			baseOptions,
+			pino.multistream([{ stream: process.stdout }, { stream: fileStream }]),
+		);
 	} catch {
 		return pino(baseOptions, process.stdout);
 	}

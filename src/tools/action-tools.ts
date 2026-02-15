@@ -78,21 +78,44 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 		},
 		{
 			name: "browser_type",
-			description: "Type text into an input field, clearing it first by default",
+			description:
+				"Type text into an input field, clearing it first by default. " +
+				"Use sequential mode for autocomplete/combobox inputs that need per-keystroke events.",
 			label: "Type",
 			parameters: Type.Object({
 				sessionId: Type.String({ description: "Session ID" }),
 				selector: Type.String({ description: "CSS selector of the input field" }),
 				text: Type.String({ description: "Text to type" }),
+				sequential: Type.Optional(
+					Type.Boolean({
+						description:
+							"Type character-by-character with key events instead of programmatic fill. " +
+							"Use this for autocomplete/search inputs that react to keystrokes.",
+					}),
+				),
+				delayMs: Type.Optional(
+					Type.Number({
+						description: "Delay between key presses in ms when sequential is true (default: 80)",
+					}),
+				),
 			}),
 			async execute(params) {
 				const sessionId = params["sessionId"] as string;
 				const selector = params["selector"] as string;
 				const text = params["text"] as string;
+				const sequential = params["sequential"] as boolean | undefined;
+				const delayMs = params["delayMs"] as number | undefined;
 				const session = getSession(ctx, sessionId);
 				const actx = makeActionContext(ctx, session);
-				const result = await typeAction(actx, selector, text);
-				logAction(ctx, sessionId, "type", result, selector, { text });
+				const opts: Parameters<typeof typeAction>[3] = {};
+				if (sequential) {
+					opts.sequential = true;
+				}
+				if (delayMs !== undefined) {
+					opts.delayMs = delayMs;
+				}
+				const result = await typeAction(actx, selector, text, opts);
+				logAction(ctx, sessionId, "type", result, selector, { text, sequential, delayMs });
 				if (!result.ok) {
 					throw new Error(result.error ?? "type failed");
 				}

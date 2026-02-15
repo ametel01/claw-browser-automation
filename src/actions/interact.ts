@@ -19,11 +19,20 @@ export async function click(
 	});
 }
 
+export interface TypeOptions extends ActionOptions {
+	clear?: boolean;
+	/** Use sequential key presses instead of programmatic fill.
+	 *  Essential for autocomplete/combobox inputs that rely on per-keystroke events. */
+	sequential?: boolean;
+	/** Delay between key presses in ms when sequential is true. Default: 80 */
+	delayMs?: number;
+}
+
 export async function type(
 	ctx: ActionContext,
 	selector: Selector,
 	text: string,
-	opts: ActionOptions & { clear?: boolean } = {},
+	opts: TypeOptions = {},
 ): Promise<ActionResult<void>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
 	return executeAction(ctx, "type", opts, async (_ctx) => {
@@ -32,10 +41,15 @@ export async function type(
 		if (opts.clear !== false) {
 			await locator.clear({ timeout: timeoutMs });
 		}
-		await locator.fill(text, { timeout: timeoutMs });
-		const value = await locator.inputValue({ timeout: timeoutMs });
-		if (value !== text) {
-			throw new Error(`type verification failed: expected "${text}", got "${value}"`);
+		if (opts.sequential) {
+			const delay = opts.delayMs ?? 80;
+			await locator.pressSequentially(text, { delay, timeout: timeoutMs });
+		} else {
+			await locator.fill(text, { timeout: timeoutMs });
+			const value = await locator.inputValue({ timeout: timeoutMs });
+			if (value !== text) {
+				throw new Error(`type verification failed: expected "${text}", got "${value}"`);
+			}
 		}
 	});
 }
