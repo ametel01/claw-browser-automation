@@ -5,7 +5,7 @@ import { click, fill, selectOption, type as typeAction } from "../actions/intera
 import { navigate } from "../actions/navigate.js";
 import { waitForCondition, waitForSelector } from "../actions/wait.js";
 import type { SkillContext } from "./context.js";
-import { getSession, makeActionContext } from "./context.js";
+import { getSession, makeActionContext, resolveLocatorParam } from "./context.js";
 import type { ToolDefinition, ToolResult } from "./session-tools.js";
 
 function jsonResult(payload: unknown): ToolResult {
@@ -58,19 +58,29 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 		},
 		{
 			name: "browser_click",
-			description: "Click an element on the page identified by a CSS selector",
+			description:
+				"Click an element on the page identified by a CSS selector or a registered handle ID",
 			label: "Click",
 			parameters: Type.Object({
 				sessionId: Type.String({ description: "Session ID" }),
-				selector: Type.String({ description: "CSS selector of the element to click" }),
+				selector: Type.Optional(
+					Type.String({ description: "CSS selector of the element to click" }),
+				),
+				handleId: Type.Optional(
+					Type.String({ description: "Handle ID from browser_register_element" }),
+				),
 			}),
 			async execute(params) {
 				const sessionId = params["sessionId"] as string;
-				const selector = params["selector"] as string;
 				const session = getSession(ctx, sessionId);
+				const selector = await resolveLocatorParam(session, {
+					selector: params["selector"] as string | undefined,
+					handleId: params["handleId"] as string | undefined,
+				});
 				const actx = makeActionContext(ctx, session);
 				const result = await click(actx, selector);
-				logAction(ctx, sessionId, "click", result, selector);
+				const selectorLabel = typeof selector === "string" ? selector : undefined;
+				logAction(ctx, sessionId, "click", result, selectorLabel);
 				if (!result.ok) {
 					throw new Error(result.error ?? "click failed");
 				}
@@ -86,7 +96,10 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 			label: "Type",
 			parameters: Type.Object({
 				sessionId: Type.String({ description: "Session ID" }),
-				selector: Type.String({ description: "CSS selector of the input field" }),
+				selector: Type.Optional(Type.String({ description: "CSS selector of the input field" })),
+				handleId: Type.Optional(
+					Type.String({ description: "Handle ID from browser_register_element" }),
+				),
 				text: Type.String({ description: "Text to type" }),
 				mode: Type.Optional(
 					Type.Union(
@@ -116,12 +129,15 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 			}),
 			async execute(params) {
 				const sessionId = params["sessionId"] as string;
-				const selector = params["selector"] as string;
 				const text = params["text"] as string;
 				const mode = params["mode"] as "fill" | "sequential" | "paste" | "nativeSetter" | undefined;
 				const sequential = params["sequential"] as boolean | undefined;
 				const delayMs = params["delayMs"] as number | undefined;
 				const session = getSession(ctx, sessionId);
+				const selector = await resolveLocatorParam(session, {
+					selector: params["selector"] as string | undefined,
+					handleId: params["handleId"] as string | undefined,
+				});
 				const actx = makeActionContext(ctx, session);
 				const opts: Parameters<typeof typeAction>[3] = {};
 				if (mode) {
@@ -133,7 +149,13 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 					opts.delayMs = delayMs;
 				}
 				const result = await typeAction(actx, selector, text, opts);
-				logAction(ctx, sessionId, "type", result, selector, { text, mode, sequential, delayMs });
+				const selectorLabel = typeof selector === "string" ? selector : undefined;
+				logAction(ctx, sessionId, "type", result, selectorLabel, {
+					text,
+					mode,
+					sequential,
+					delayMs,
+				});
 				if (!result.ok) {
 					throw new Error(result.error ?? "type failed");
 				}
@@ -146,17 +168,24 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 			label: "Select",
 			parameters: Type.Object({
 				sessionId: Type.String({ description: "Session ID" }),
-				selector: Type.String({ description: "CSS selector of the select element" }),
+				selector: Type.Optional(Type.String({ description: "CSS selector of the select element" })),
+				handleId: Type.Optional(
+					Type.String({ description: "Handle ID from browser_register_element" }),
+				),
 				value: Type.String({ description: "Value to select" }),
 			}),
 			async execute(params) {
 				const sessionId = params["sessionId"] as string;
-				const selector = params["selector"] as string;
 				const value = params["value"] as string;
 				const session = getSession(ctx, sessionId);
+				const selector = await resolveLocatorParam(session, {
+					selector: params["selector"] as string | undefined,
+					handleId: params["handleId"] as string | undefined,
+				});
 				const actx = makeActionContext(ctx, session);
 				const result = await selectOption(actx, selector, value);
-				logAction(ctx, sessionId, "select", result, selector, { value });
+				const selectorLabel = typeof selector === "string" ? selector : undefined;
+				logAction(ctx, sessionId, "select", result, selectorLabel, { value });
 				if (!result.ok) {
 					throw new Error(result.error ?? "select failed");
 				}
@@ -193,15 +222,22 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 			label: "Extract Text",
 			parameters: Type.Object({
 				sessionId: Type.String({ description: "Session ID" }),
-				selector: Type.String({ description: "CSS selector of the element" }),
+				selector: Type.Optional(Type.String({ description: "CSS selector of the element" })),
+				handleId: Type.Optional(
+					Type.String({ description: "Handle ID from browser_register_element" }),
+				),
 			}),
 			async execute(params) {
 				const sessionId = params["sessionId"] as string;
-				const selector = params["selector"] as string;
 				const session = getSession(ctx, sessionId);
+				const selector = await resolveLocatorParam(session, {
+					selector: params["selector"] as string | undefined,
+					handleId: params["handleId"] as string | undefined,
+				});
 				const actx = makeActionContext(ctx, session);
 				const result = await getText(actx, selector);
-				logAction(ctx, sessionId, "extract_text", result, selector);
+				const selectorLabel = typeof selector === "string" ? selector : undefined;
+				logAction(ctx, sessionId, "extract_text", result, selectorLabel);
 				if (!result.ok) {
 					throw new Error(result.error ?? "extract text failed");
 				}
@@ -214,7 +250,12 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 			label: "Extract All",
 			parameters: Type.Object({
 				sessionId: Type.String({ description: "Session ID" }),
-				selector: Type.String({ description: "CSS selector matching multiple elements" }),
+				selector: Type.Optional(
+					Type.String({ description: "CSS selector matching multiple elements" }),
+				),
+				handleId: Type.Optional(
+					Type.String({ description: "Handle ID from browser_register_element" }),
+				),
 				attributes: Type.Optional(
 					Type.Array(Type.String(), {
 						description: "Attributes to extract (default: textContent)",
@@ -223,13 +264,17 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 			}),
 			async execute(params) {
 				const sessionId = params["sessionId"] as string;
-				const selector = params["selector"] as string;
 				const attributes = params["attributes"] as string[] | undefined;
 				const session = getSession(ctx, sessionId);
+				const selector = await resolveLocatorParam(session, {
+					selector: params["selector"] as string | undefined,
+					handleId: params["handleId"] as string | undefined,
+				});
 				const actx = makeActionContext(ctx, session);
 				const opts = attributes ? { attributes } : {};
 				const result = await getAll(actx, selector, opts);
-				logAction(ctx, sessionId, "extract_all", result, selector, { attributes });
+				const selectorLabel = typeof selector === "string" ? selector : undefined;
+				logAction(ctx, sessionId, "extract_all", result, selectorLabel, { attributes });
 				if (!result.ok) {
 					throw new Error(result.error ?? "extract all failed");
 				}
@@ -318,9 +363,14 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 			label: "Extract Structured",
 			parameters: Type.Object({
 				sessionId: Type.String({ description: "Session ID" }),
-				selector: Type.String({
-					description: "CSS selector matching the elements to extract from",
-				}),
+				selector: Type.Optional(
+					Type.String({
+						description: "CSS selector matching the elements to extract from",
+					}),
+				),
+				handleId: Type.Optional(
+					Type.String({ description: "Handle ID from browser_register_element" }),
+				),
 				fields: Type.Record(Type.String(), Type.String(), {
 					description:
 						"Map of output field names to HTML attributes. " +
@@ -330,10 +380,13 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 			}),
 			async execute(params) {
 				const sessionId = params["sessionId"] as string;
-				const selector = params["selector"] as string;
 				const fields = params["fields"] as Record<string, string>;
 				const limit = params["limit"] as number | undefined;
 				const session = getSession(ctx, sessionId);
+				const selector = await resolveLocatorParam(session, {
+					selector: params["selector"] as string | undefined,
+					handleId: params["handleId"] as string | undefined,
+				});
 				const actx = makeActionContext(ctx, session);
 
 				const schemaProps: Record<string, ReturnType<typeof Type.String>> = {};
@@ -344,7 +397,8 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 
 				const opts = limit !== undefined ? { limit } : {};
 				const result = await extractStructured(actx, selector, schema, opts);
-				logAction(ctx, sessionId, "extract_structured", result, selector, { fields, limit });
+				const selectorLabel = typeof selector === "string" ? selector : undefined;
+				logAction(ctx, sessionId, "extract_structured", result, selectorLabel, { fields, limit });
 				if (!result.ok) {
 					throw new Error(result.error ?? "extract structured failed");
 				}

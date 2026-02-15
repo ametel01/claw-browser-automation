@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import type { BrowserContext, Page } from "playwright-core";
 import type { Logger } from "../observe/logger.js";
+import { HandleRegistry } from "./handle-registry.js";
 import type { CookieData, SessionSnapshot } from "./snapshot.js";
 
 export interface BrowserSessionOptions {
@@ -17,6 +18,7 @@ export class BrowserSession {
 	private _profile: string | undefined;
 	private _healthy: boolean;
 	private _log: Logger;
+	private _handles: HandleRegistry | null = null;
 
 	constructor(opts: BrowserSessionOptions) {
 		this.id = nanoid(12);
@@ -39,6 +41,13 @@ export class BrowserSession {
 
 	get profile(): string | undefined {
 		return this._profile;
+	}
+
+	get handles(): HandleRegistry {
+		if (!this._handles) {
+			this._handles = new HandleRegistry();
+		}
+		return this._handles;
 	}
 
 	currentUrl(): string {
@@ -102,6 +111,7 @@ export class BrowserSession {
 	}
 
 	async restore(snapshot: SessionSnapshot): Promise<void> {
+		this._handles?.clear();
 		const cookiePayload = snapshot.cookies.map((cookie) => ({
 			name: cookie.name,
 			value: cookie.value,
@@ -142,6 +152,7 @@ export class BrowserSession {
 	}
 
 	async newPage(url?: string): Promise<Page> {
+		this._handles?.clear();
 		const page = await this._context.newPage();
 		if (url) {
 			await page.goto(url, { waitUntil: "domcontentloaded" });
@@ -153,6 +164,7 @@ export class BrowserSession {
 
 	async close(): Promise<void> {
 		this._log.info("closing session");
+		this._handles?.clear();
 		try {
 			await this._context.close();
 		} catch (err) {

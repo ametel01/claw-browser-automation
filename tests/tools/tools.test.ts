@@ -10,7 +10,8 @@ import { SessionStore } from "../../src/store/sessions.js";
 import { createActionTools } from "../../src/tools/action-tools.js";
 import { createApprovalTools } from "../../src/tools/approval-tools.js";
 import type { SkillContext } from "../../src/tools/context.js";
-import { getSession, makeActionContext } from "../../src/tools/context.js";
+import { getSession, makeActionContext, resolveLocatorParam } from "../../src/tools/context.js";
+import { createHandleTools } from "../../src/tools/handle-tools.js";
 import { createPageTools } from "../../src/tools/page-tools.js";
 import type { ToolDefinition } from "../../src/tools/session-tools.js";
 import { createSessionTools } from "../../src/tools/session-tools.js";
@@ -30,6 +31,34 @@ function createMockLogger() {
 }
 
 function createMockSession(id: string, url = "about:blank") {
+	const handles = {
+		register: vi.fn(async (_page: unknown, selector: unknown) => ({
+			handleId: "hdl-1",
+			selector,
+			lastStrategy: { type: "css", selector: "#mock" },
+			remapCount: 0,
+		})),
+		resolve: vi.fn(async () => ({
+			locator: { first: () => ({}) },
+			handle: {
+				handleId: "hdl-1",
+				selector: { type: "css", selector: "#from-handle" },
+				lastStrategy: { type: "css", selector: "#from-handle" },
+				remapCount: 0,
+			},
+			resolution: {
+				locator: { first: () => ({}) },
+				strategy: { type: "css", selector: "#from-handle" },
+				strategyIndex: 0,
+				resolutionMs: 1,
+				chainLength: 1,
+			},
+			remapped: false,
+		})),
+		release: vi.fn(() => true),
+		clear: vi.fn(),
+	};
+
 	return {
 		id,
 		page: {
@@ -37,6 +66,7 @@ function createMockSession(id: string, url = "about:blank") {
 			title: () => Promise.resolve("Test Page"),
 			evaluate: () => Promise.resolve("complete"),
 		},
+		handles,
 		context: {},
 		profile: undefined,
 		currentUrl: () => url,
@@ -219,6 +249,12 @@ describe("Tool definitions", () => {
 				"browser_wait requires either selector or condition",
 			);
 		});
+
+		it("browser_extract_structured should support handleId parameter", () => {
+			const extractTool = findTool(tools, "browser_extract_structured");
+			const params = extractTool.parameters as { properties?: Record<string, unknown> };
+			expect(params.properties?.["handleId"]).toBeDefined();
+		});
 	});
 
 	describe("createPageTools", () => {
@@ -282,23 +318,88 @@ describe("Tool definitions", () => {
 		});
 	});
 
+	describe("resolveLocatorParam helper", () => {
+		it("should use selector directly when provided", async () => {
+			const mock = createMockSession("test-id");
+			const selector = await resolveLocatorParam(
+				mock as unknown as Parameters<typeof resolveLocatorParam>[0],
+				{
+					selector: "#target",
+					handleId: undefined,
+				},
+			);
+			expect(selector).toBe("#target");
+		});
+
+		it("should resolve selector from handleId when provided", async () => {
+			const mock = createMockSession("test-id");
+			const selector = await resolveLocatorParam(
+				mock as unknown as Parameters<typeof resolveLocatorParam>[0],
+				{
+					selector: undefined,
+					handleId: "hdl-1",
+				},
+			);
+			expect((selector as { type: string; selector: string }).selector).toBe("#from-handle");
+		});
+	});
+
+	describe("createHandleTools", () => {
+		let tools: ToolDefinition[];
+
+		beforeEach(() => {
+			tools = createHandleTools(ctx);
+		});
+
+		it("should create expected handle tools", () => {
+			const names = tools.map((t) => t.name);
+			expect(names).toContain("browser_register_element");
+			expect(names).toContain("browser_resolve_element");
+			expect(names).toContain("browser_release_element");
+			expect(tools).toHaveLength(3);
+		});
+
+		it("browser_register_element should reject invalid selector payload", async () => {
+			const openTool = findTool(createSessionTools(ctx), "browser_open");
+			const openResult = await openTool.execute({});
+			const sessionId = (openResult.details as { sessionId: string }).sessionId;
+			const registerTool = findTool(tools, "browser_register_element");
+			await expect(registerTool.execute({ sessionId, selector: 123 })).rejects.toThrow(
+				"selector must be a CSS string, a selector strategy object, or an array of strategy objects",
+			);
+		});
+	});
+
 	describe("all tools combined", () => {
 		it("should have globally unique names across all tool groups", () => {
 			const sessionTools = createSessionTools(ctx);
 			const actionTools = createActionTools(ctx);
 			const pageTools = createPageTools(ctx);
-			const allNames = [...sessionTools, ...actionTools, ...pageTools].map((t) => t.name);
+			const approvalTools = createApprovalTools(ctx);
+			const handleTools = createHandleTools(ctx);
+			const allNames = [
+				...sessionTools,
+				...actionTools,
+				...pageTools,
+				...approvalTools,
+				...handleTools,
+			].map((t) => t.name);
 			expect(new Set(allNames).size).toBe(allNames.length);
 		});
 
-		it("should total 20 tools", () => {
+		it("should total 23 tools", () => {
 			const sessionTools = createSessionTools(ctx);
 			const actionTools = createActionTools(ctx);
 			const pageTools = createPageTools(ctx);
 			const approvalTools = createApprovalTools(ctx);
+			const handleTools = createHandleTools(ctx);
 			const total =
-				sessionTools.length + actionTools.length + pageTools.length + approvalTools.length;
-			expect(total).toBe(20);
+				sessionTools.length +
+				actionTools.length +
+				pageTools.length +
+				approvalTools.length +
+				handleTools.length;
+			expect(total).toBe(23);
 		});
 
 		it("all tool names should start with browser_", () => {
@@ -306,7 +407,14 @@ describe("Tool definitions", () => {
 			const actionTools = createActionTools(ctx);
 			const pageTools = createPageTools(ctx);
 			const approvalTools = createApprovalTools(ctx);
-			const allTools = [...sessionTools, ...actionTools, ...pageTools, ...approvalTools];
+			const handleTools = createHandleTools(ctx);
+			const allTools = [
+				...sessionTools,
+				...actionTools,
+				...pageTools,
+				...approvalTools,
+				...handleTools,
+			];
 			for (const tool of allTools) {
 				expect(tool.name).toMatch(/^browser_/);
 			}

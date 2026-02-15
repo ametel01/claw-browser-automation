@@ -1,6 +1,6 @@
 # claw-browser-automation
 
-Reliable browser automation layer for [OpenClaw](https://github.com/nichochar/openclaw). Replaces the flaky extension relay with managed Playwright sessions that the AI agent drives directly.
+Reliable browser automation layer for [OpenClaw](https://github.com/openclaw/openclaw). Replaces the flaky extension relay with managed Playwright sessions that the AI agent drives directly.
 
 The agent (clawbot) is the workflow engine — it decides *what* to do. This layer provides reliable *how*: atomic browser actions with postcondition verification, automatic retries, session persistence, and full observability.
 

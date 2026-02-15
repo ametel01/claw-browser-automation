@@ -170,7 +170,7 @@ Keep `sequential` boolean for backward compat; `mode` takes precedence when set.
 
 ---
 
-## Phase 4: Stable Element Handles (#6)
+## Phase 4: Stable Element Handles (#6) **COMPLETE**
 
 Highest risk item — entirely opt-in, doesn't break existing tools.
 
