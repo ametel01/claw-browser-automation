@@ -256,7 +256,7 @@ All code must pass `bun check` before commit. No exceptions.
 
 ---
 
-## Phase 1 — Browser Pool & Sessions
+## Phase 1 — Browser Pool & Sessions **COMPLETE**
 
 > Goal: Launch, manage, and recover browser instances reliably.
 

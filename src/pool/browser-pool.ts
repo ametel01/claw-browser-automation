@@ -2,7 +2,9 @@ import type { Browser, LaunchOptions } from "playwright-core";
 import { chromium } from "playwright-core";
 import type { Logger } from "../observe/logger.js";
 import { createLogger } from "../observe/logger.js";
+import { ensureProfileDir, loadProfileSnapshot, saveProfileSnapshot } from "../session/profiles.js";
 import { BrowserSession } from "../session/session.js";
+import type { SessionSnapshot } from "../session/snapshot.js";
 import type { HealthProbeOptions } from "./health.js";
 import { HealthMonitor } from "./health.js";
 
@@ -33,6 +35,7 @@ export class BrowserPool {
 	private _launchOptions: LaunchOptions;
 	private _log: Logger;
 	private _launching: Promise<Browser> | null = null;
+	private _shuttingDown = false;
 
 	constructor(config: PoolConfig = {}) {
 		this._maxContexts = config.maxContexts ?? 4;
@@ -55,25 +58,28 @@ export class BrowserPool {
 			);
 		}
 
-		const browser = await this._ensureBrowser();
-		const context = await browser.newContext();
-
-		// For persistent profiles, we handle state via snapshot restore
-		// Playwright's launchPersistentContext is per-browser, not per-context
-		// So we use regular contexts + manual cookie/storage restore from profile
-
-		const page = await context.newPage();
-
-		if (opts.url) {
-			await page.goto(opts.url, { waitUntil: "domcontentloaded" });
+		let profileSnapshot: SessionSnapshot | undefined;
+		if (opts.profile) {
+			ensureProfileDir(opts.profile);
+			profileSnapshot = loadProfileSnapshot(opts.profile);
 		}
 
+		const browser = await this._ensureBrowser();
+		const context = await browser.newContext();
+		const page = await context.newPage();
 		const session = new BrowserSession({
 			context,
 			page,
 			profile: opts.profile,
 			logger: this._log,
 		});
+
+		if (profileSnapshot) {
+			await session.restore(profileSnapshot);
+		}
+		if (opts.url) {
+			await page.goto(opts.url, { waitUntil: "domcontentloaded" });
+		}
 
 		this._sessions.set(session.id, session);
 		this._health.track(session);
@@ -87,6 +93,7 @@ export class BrowserPool {
 	}
 
 	async release(session: BrowserSession): Promise<void> {
+		await this._persistProfileSnapshot(session);
 		this._health.untrack(session.id);
 		this._sessions.delete(session.id);
 		await session.close();
@@ -99,6 +106,7 @@ export class BrowserPool {
 			this._log.warn({ sessionId }, "destroy called on unknown session");
 			return;
 		}
+		await this._persistProfileSnapshot(session);
 		this._health.untrack(sessionId);
 		this._sessions.delete(sessionId);
 		await session.close();
@@ -128,6 +136,7 @@ export class BrowserPool {
 	}
 
 	async shutdown(): Promise<void> {
+		this._shuttingDown = true;
 		this._log.info("shutting down browser pool");
 		this._health.stop();
 
@@ -149,6 +158,7 @@ export class BrowserPool {
 		}
 
 		this._launching = null;
+		this._shuttingDown = false;
 		this._log.info("browser pool shut down");
 	}
 
@@ -157,7 +167,6 @@ export class BrowserPool {
 			return this._browser;
 		}
 
-		// Prevent concurrent launch attempts
 		if (this._launching) {
 			return this._launching;
 		}
@@ -183,9 +192,9 @@ export class BrowserPool {
 		browser.on("disconnected", () => {
 			this._log.warn("browser disconnected");
 			this._browser = null;
-			// Mark all sessions unhealthy so next health check triggers recovery
 			for (const session of this._sessions.values()) {
 				session.markUnhealthy();
+				this._handleUnhealthy(session);
 			}
 		});
 
@@ -194,13 +203,76 @@ export class BrowserPool {
 		return browser;
 	}
 
+	private async _persistProfileSnapshot(session: BrowserSession): Promise<void> {
+		if (!session.profile) {
+			return;
+		}
+		try {
+			const snapshot = await session.snapshot();
+			saveProfileSnapshot(session.profile, snapshot);
+		} catch (err) {
+			this._log.warn(
+				{ sessionId: session.id, profile: session.profile, err },
+				"failed to persist profile snapshot",
+			);
+		}
+	}
+
 	private _handleUnhealthy(session: BrowserSession): void {
-		this._log.error({ sessionId: session.id }, "session unhealthy — removing from pool");
+		this._recoverUnhealthy(session).catch((err) => {
+			this._log.error({ sessionId: session.id, err }, "unhealthy session recovery failed");
+		});
+	}
+
+	private async _recoverUnhealthy(session: BrowserSession): Promise<void> {
+		if (this._shuttingDown) {
+			return;
+		}
+		if (!this._sessions.has(session.id)) {
+			return;
+		}
+
+		this._log.error({ sessionId: session.id }, "session unhealthy — recreating context");
+		let snapshot: SessionSnapshot | undefined;
+		try {
+			snapshot = await session.snapshot();
+		} catch {
+			if (session.profile) {
+				snapshot = loadProfileSnapshot(session.profile);
+			}
+		}
+
 		this._health.untrack(session.id);
 		this._sessions.delete(session.id);
-		// Don't await close — it might hang on a dead context
-		session.close().catch((err) => {
+		try {
+			await session.close();
+		} catch (err) {
 			this._log.warn({ sessionId: session.id, err }, "error closing unhealthy session");
-		});
+		}
+
+		try {
+			const browser = await this._ensureBrowser();
+			const context = await browser.newContext();
+			const page = await context.newPage();
+			const replacement = new BrowserSession({
+				context,
+				page,
+				profile: session.profile,
+				logger: this._log,
+			});
+
+			if (snapshot) {
+				await replacement.restore(snapshot);
+			}
+
+			this._sessions.set(replacement.id, replacement);
+			this._health.track(replacement);
+			this._log.info(
+				{ oldSessionId: session.id, sessionId: replacement.id },
+				"unhealthy session recovered",
+			);
+		} catch (err) {
+			this._log.error({ sessionId: session.id, err }, "failed to recover unhealthy session");
+		}
 	}
 }

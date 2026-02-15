@@ -1,12 +1,38 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { BrowserPool } from "../../src/pool/browser-pool.js";
+
+function delay(ms: number): Promise<void> {
+	return new Promise((resolve) => {
+		setTimeout(resolve, ms);
+	});
+}
+
+async function waitFor(
+	predicate: () => boolean,
+	timeoutMs: number,
+	intervalMs = 20,
+): Promise<void> {
+	const startedAt = Date.now();
+	while (!predicate()) {
+		if (Date.now() - startedAt > timeoutMs) {
+			throw new Error(`condition not met within ${timeoutMs}ms`);
+		}
+		await delay(intervalMs);
+	}
+}
 
 describe("BrowserPool", () => {
 	let pool: BrowserPool;
+	const previousProfilesDir = process.env["BROWSER_PROFILES_DIR"];
 
 	afterEach(async () => {
 		if (pool) {
 			await pool.shutdown();
+		}
+		if (previousProfilesDir === undefined) {
+			delete process.env["BROWSER_PROFILES_DIR"];
+		} else {
+			process.env["BROWSER_PROFILES_DIR"] = previousProfilesDir;
 		}
 	});
 
@@ -45,7 +71,6 @@ describe("BrowserPool", () => {
 		await pool.release(session);
 		expect(pool.status().activeSessions).toBe(0);
 
-		// Can acquire again after release
 		const session2 = await pool.acquire();
 		expect(session2.id).not.toBe(session.id);
 	});
@@ -72,6 +97,52 @@ describe("BrowserPool", () => {
 		expect(snapshot.url).toContain("data:text/html");
 		expect(snapshot.timestamp).toBeGreaterThan(0);
 		expect(snapshot.cookies).toBeInstanceOf(Array);
+
+		await session.page.goto("about:blank");
+		await session.restore(snapshot);
+		expect(session.currentUrl()).toContain("data:text/html");
+	});
+
+	it("should reject unsafe profile names", async () => {
+		pool = new BrowserPool({ launchOptions: { headless: true } });
+		await expect(pool.acquire({ profile: "../escape" })).rejects.toThrow("invalid profile name");
+	});
+
+	it("should restore a saved profile snapshot on next acquire", async () => {
+		process.env["BROWSER_PROFILES_DIR"] = `/tmp/claw-profiles-${Date.now()}`;
+
+		pool = new BrowserPool({ launchOptions: { headless: true } });
+		const first = await pool.acquire({
+			profile: "regression_profile",
+			url: "data:text/html,<h1>persist me</h1>",
+		});
+		await pool.release(first);
+		await pool.shutdown();
+
+		pool = new BrowserPool({ launchOptions: { headless: true } });
+		const restored = await pool.acquire({ profile: "regression_profile" });
+		expect(restored.currentUrl()).toContain("data:text/html,<h1>persist me</h1>");
+	});
+
+	it("should recover session after health check circuit breaker", async () => {
+		pool = new BrowserPool({
+			launchOptions: { headless: true },
+			healthCheckIntervalMs: 25,
+		});
+		const session = await pool.acquire({
+			profile: "health_recovery",
+			url: "data:text/html,<h1>health</h1>",
+		});
+		const previousId = session.id;
+
+		await session.page.close();
+		await waitFor(
+			() => pool.listSessions().some((trackedSession) => trackedSession.id !== previousId),
+			2000,
+		);
+
+		expect(pool.status().activeSessions).toBe(1);
+		expect(pool.listSessions()[0]?.id).not.toBe(previousId);
 	});
 
 	it("should list all active sessions", async () => {

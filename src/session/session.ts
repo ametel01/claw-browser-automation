@@ -101,6 +101,46 @@ export class BrowserSession {
 		};
 	}
 
+	async restore(snapshot: SessionSnapshot): Promise<void> {
+		const cookiePayload = snapshot.cookies.map((cookie) => ({
+			name: cookie.name,
+			value: cookie.value,
+			domain: cookie.domain,
+			path: cookie.path,
+			expires: cookie.expires,
+			httpOnly: cookie.httpOnly,
+			secure: cookie.secure,
+			sameSite: cookie.sameSite,
+		}));
+		await this._context.clearCookies();
+		if (cookiePayload.length > 0) {
+			await this._context.addCookies(cookiePayload);
+		}
+
+		if (this._page.isClosed()) {
+			this._page = await this._context.newPage();
+			this._setupListeners();
+		}
+
+		if (snapshot.url) {
+			await this._page.goto(snapshot.url, { waitUntil: "domcontentloaded" });
+		}
+
+		if (Object.keys(snapshot.localStorage).length > 0) {
+			try {
+				await this._page.evaluate((entries) => {
+					for (const [key, value] of Object.entries(entries)) {
+						window.localStorage.setItem(key, value);
+					}
+				}, snapshot.localStorage);
+			} catch {
+				this._log.warn("failed to restore localStorage for snapshot");
+			}
+		}
+
+		this.markHealthy();
+	}
+
 	async newPage(url?: string): Promise<Page> {
 		const page = await this._context.newPage();
 		if (url) {
