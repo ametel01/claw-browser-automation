@@ -1,5 +1,5 @@
 import type { Selector } from "../selectors/strategy.js";
-import { resolveBestSelector } from "../selectors/strategy.js";
+import { resolveWithConfidence } from "../selectors/strategy.js";
 import type { ActionContext, ActionOptions, ActionResult } from "./action.js";
 import { executeAction, resolveTimeout } from "./action.js";
 
@@ -14,7 +14,8 @@ export async function waitForSelector(
 	const state = opts.state ?? "visible";
 
 	return executeAction(ctx, "waitForSelector", opts, async (_ctx) => {
-		const locator = await resolveBestSelector(_ctx.page, selector, state, timeoutMs);
+		const resolution = await resolveWithConfidence(_ctx.page, selector, state, timeoutMs);
+		const locator = resolution.locator;
 		await locator.first().waitFor({ state, timeout: timeoutMs });
 	});
 }

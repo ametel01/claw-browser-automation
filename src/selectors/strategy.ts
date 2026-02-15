@@ -1,4 +1,13 @@
 import type { Locator, Page } from "playwright-core";
+import { TargetNotFoundError } from "../errors.js";
+
+export interface SelectorResolution {
+	locator: Locator;
+	strategy: SelectorStrategy;
+	strategyIndex: number;
+	resolutionMs: number;
+	chainLength: number;
+}
 
 export type SelectorStrategy =
 	| { type: "aria"; role: string; name: string }
@@ -19,7 +28,7 @@ export function resolveSelector(page: Page, selector: Selector): Locator {
 	if (Array.isArray(selector)) {
 		const first = selector[0];
 		if (!first) {
-			throw new Error("empty selector strategy array");
+			throw new TargetNotFoundError("empty selector strategy array");
 		}
 		return resolveOne(page, first);
 	}
@@ -32,35 +41,66 @@ export async function resolveFirstVisible(
 	selector: Selector,
 	timeoutMs: number,
 ): Promise<Locator> {
-	const locator = await resolveBestSelector(page, selector, "visible", timeoutMs);
-	return locator.first();
+	const resolution = await resolveWithConfidence(page, selector, "visible", timeoutMs);
+	return resolution.locator.first();
 }
 
-export async function resolveBestSelector(
+export async function resolveWithConfidence(
 	page: Page,
 	selector: Selector,
 	state: SelectorWaitState,
 	timeoutMs: number,
-): Promise<Locator> {
-	if (typeof selector === "string" || !Array.isArray(selector)) {
-		return resolveSelector(page, selector);
+): Promise<SelectorResolution> {
+	const start = performance.now();
+
+	if (typeof selector === "string") {
+		const locator = page.locator(selector);
+		const strategy: SelectorStrategy = { type: "css", selector };
+		return {
+			locator,
+			strategy,
+			strategyIndex: 0,
+			resolutionMs: Math.round(performance.now() - start),
+			chainLength: 1,
+		};
+	}
+
+	if (!Array.isArray(selector)) {
+		const locator = resolveOne(page, selector);
+		return {
+			locator,
+			strategy: selector,
+			strategyIndex: 0,
+			resolutionMs: Math.round(performance.now() - start),
+			chainLength: 1,
+		};
 	}
 
 	if (selector.length === 0) {
-		throw new Error("empty selector strategy array");
+		throw new TargetNotFoundError("empty selector strategy array");
 	}
 
 	// Hidden/detached semantics can pass on missing elements, so fallback probing is not meaningful.
 	if (state === "hidden" || state === "detached") {
 		const first = selector[0];
 		if (!first) {
-			throw new Error("empty selector strategy array");
+			throw new TargetNotFoundError("empty selector strategy array");
 		}
-		return resolveOne(page, first);
+		return {
+			locator: resolveOne(page, first),
+			strategy: first,
+			strategyIndex: 0,
+			resolutionMs: Math.round(performance.now() - start),
+			chainLength: selector.length,
+		};
 	}
 
 	const deadline = Date.now() + timeoutMs;
-	for (const strategy of selector) {
+	for (let i = 0; i < selector.length; i++) {
+		const strategy = selector[i];
+		if (!strategy) {
+			continue;
+		}
 		const remaining = deadline - Date.now();
 		if (remaining <= 0) {
 			break;
@@ -68,13 +108,33 @@ export async function resolveBestSelector(
 		try {
 			const locator = resolveOne(page, strategy);
 			await locator.first().waitFor({ state, timeout: Math.min(remaining, 2000) });
-			return locator;
+			return {
+				locator,
+				strategy,
+				strategyIndex: i,
+				resolutionMs: Math.round(performance.now() - start),
+				chainLength: selector.length,
+			};
 		} catch {
 			// Strategy didn't match — try next one
 		}
 	}
 
-	throw new Error(`no selector strategy matched within ${timeoutMs}ms for state ${state}`);
+	throw new TargetNotFoundError(
+		`no selector strategy matched within ${timeoutMs}ms for state ${state}`,
+		"Try a different selector strategy or increase the timeout.",
+	);
+}
+
+/** @deprecated Use resolveWithConfidence — this wrapper extracts .locator for backward compat */
+export async function resolveBestSelector(
+	page: Page,
+	selector: Selector,
+	state: SelectorWaitState,
+	timeoutMs: number,
+): Promise<Locator> {
+	const resolution = await resolveWithConfidence(page, selector, state, timeoutMs);
+	return resolution.locator;
 }
 
 function resolveOne(page: Page, strategy: SelectorStrategy): Locator {

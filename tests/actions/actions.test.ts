@@ -2,11 +2,13 @@ import type { Browser, BrowserContext, Page } from "playwright-core";
 import { chromium } from "playwright-core";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ActionContext } from "../../src/actions/action.js";
+import { executeAction } from "../../src/actions/action.js";
 import { getAll, getPageContent, getText } from "../../src/actions/extract.js";
 import { click, fill, type as typeAction } from "../../src/actions/interact.js";
 import { navigate } from "../../src/actions/navigate.js";
 import { getPageState, screenshot, scroll } from "../../src/actions/page.js";
 import { waitForSelector } from "../../src/actions/wait.js";
+import { TargetNotFoundError } from "../../src/errors.js";
 import { createLogger } from "../../src/observe/logger.js";
 import { ActionTrace } from "../../src/observe/trace.js";
 import type { SelectorStrategy } from "../../src/selectors/strategy.js";
@@ -249,5 +251,28 @@ describe("Action Engine", () => {
 		expect(sessionTrace[0]?.ok).toBe(true);
 		expect(sessionTrace[1]?.ok).toBe(false);
 		expect(trace.stats().actionsTotal).toBe(2);
+	});
+
+	it("should not leak structured errors from earlier retries", async () => {
+		await setup("<p>Retry state test</p>");
+		let attempts = 0;
+		const result = await executeAction(
+			ctx,
+			"retry-state",
+			{
+				retries: 1,
+				postcondition: async () => false,
+			},
+			async () => {
+				attempts += 1;
+				if (attempts === 1) {
+					throw new TargetNotFoundError("missing on first attempt");
+				}
+				return "done";
+			},
+		);
+		expect(result.ok).toBe(false);
+		expect(result.error).toBe("postcondition failed");
+		expect(result.structuredError).toBeUndefined();
 	});
 });

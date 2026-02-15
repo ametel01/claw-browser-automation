@@ -1,3 +1,4 @@
+import { AssertionFailedError } from "../errors.js";
 import type { Selector } from "../selectors/strategy.js";
 import { resolveFirstVisible } from "../selectors/strategy.js";
 import type { ActionContext, ActionOptions, ActionResult } from "./action.js";
@@ -48,7 +49,9 @@ export async function type(
 			await locator.fill(text, { timeout: timeoutMs });
 			const value = await locator.inputValue({ timeout: timeoutMs });
 			if (value !== text) {
-				throw new Error(`type verification failed: expected "${text}", got "${value}"`);
+				throw new AssertionFailedError(
+					`type verification failed: expected "${text}", got "${value}"`,
+				);
 			}
 		}
 	});
@@ -68,7 +71,7 @@ export async function selectOption(
 		const expected = Array.isArray(value) ? value : [value];
 		for (const entry of expected) {
 			if (!selected.includes(entry)) {
-				throw new Error(`select verification failed: "${entry}" was not selected`);
+				throw new AssertionFailedError(`select verification failed: "${entry}" was not selected`);
 			}
 		}
 		return selected;
@@ -85,7 +88,7 @@ export async function check(
 		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
 		await locator.check({ timeout: timeoutMs });
 		if (!(await locator.isChecked({ timeout: timeoutMs }))) {
-			throw new Error("check verification failed");
+			throw new AssertionFailedError("check verification failed");
 		}
 	});
 }
@@ -100,7 +103,7 @@ export async function uncheck(
 		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
 		await locator.uncheck({ timeout: timeoutMs });
 		if (await locator.isChecked({ timeout: timeoutMs })) {
-			throw new Error("uncheck verification failed");
+			throw new AssertionFailedError("uncheck verification failed");
 		}
 	});
 }
@@ -157,7 +160,7 @@ export async function fill(
 				await locator.fill(value, { timeout: timeoutMs });
 				const actual = await locator.inputValue({ timeout: timeoutMs });
 				if (actual !== value) {
-					throw new Error(`fill verification failed for ${selectorStr}`);
+					throw new AssertionFailedError(`fill verification failed for ${selectorStr}`);
 				}
 				filled.push(selectorStr);
 			} catch {

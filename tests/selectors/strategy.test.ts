@@ -6,6 +6,7 @@ import {
 	resolveBestSelector,
 	resolveFirstVisible,
 	resolveSelector,
+	resolveWithConfidence,
 } from "../../src/selectors/strategy.js";
 
 describe("Selector Strategy", () => {
@@ -100,5 +101,19 @@ describe("Selector Strategy", () => {
 		];
 		const locator = await resolveBestSelector(page, strategies, "attached", 5000);
 		expect(await locator.first().innerText()).toBe("Found via attached fallback");
+	});
+
+	it("should return selector confidence metadata", async () => {
+		await setup('<span class="fallback">Found via confidence</span>');
+		const strategies: SelectorStrategy[] = [
+			{ type: "testid", id: "nonexistent" },
+			{ type: "css", selector: ".fallback" },
+		];
+		const resolution = await resolveWithConfidence(page, strategies, "visible", 5000);
+		expect(resolution.strategy.type).toBe("css");
+		expect(resolution.strategyIndex).toBe(1);
+		expect(resolution.chainLength).toBe(2);
+		expect(resolution.resolutionMs).toBeGreaterThanOrEqual(0);
+		expect(await resolution.locator.first().innerText()).toBe("Found via confidence");
 	});
 });

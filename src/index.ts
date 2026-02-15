@@ -104,9 +104,25 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 	return { tools, context: ctx, shutdown };
 }
 
-export type { ActionContext, ActionOptions, ActionResult } from "./actions/action.js";
+export type {
+	ActionContext,
+	ActionOptions,
+	ActionResult,
+	StructuredError,
+} from "./actions/action.js";
+// biome-ignore lint/performance/noBarrelFile: index.ts is the package public API surface
+export {
+	AssertionFailedError,
+	BrowserAutomationError,
+	NavigationInterruptedError,
+	SessionUnhealthyError,
+	StaleElementError,
+	TargetNotFoundError,
+	TimeoutExceededError,
+} from "./errors.js";
 export type { TraceEntry, TraceStats } from "./observe/trace.js";
 export type { PoolStatus } from "./pool/browser-pool.js";
+export type { SelectorResolution, SelectorStrategy } from "./selectors/strategy.js";
 export type { CookieData, SessionSnapshot } from "./session/snapshot.js";
 export type { SkillContext } from "./tools/context.js";
 // Re-export key types for consumers

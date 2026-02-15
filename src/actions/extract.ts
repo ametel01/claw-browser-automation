@@ -1,5 +1,5 @@
 import type { Selector } from "../selectors/strategy.js";
-import { resolveBestSelector, resolveFirstVisible } from "../selectors/strategy.js";
+import { resolveFirstVisible, resolveWithConfidence } from "../selectors/strategy.js";
 import type { ActionContext, ActionOptions, ActionResult } from "./action.js";
 import { executeAction, resolveTimeout } from "./action.js";
 import { waitForDomStability } from "./resilience.js";
@@ -46,7 +46,8 @@ export async function getAll(
 
 	return executeAction(ctx, "getAll", opts, async (_ctx) => {
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
-		const locator = await resolveBestSelector(_ctx.page, selector, "attached", timeoutMs);
+		const resolution = await resolveWithConfidence(_ctx.page, selector, "attached", timeoutMs);
+		const locator = resolution.locator;
 		await locator.first().waitFor({ state: "attached", timeout: timeoutMs });
 
 		const count = await locator.count();

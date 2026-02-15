@@ -1,15 +1,33 @@
 import type { Page } from "playwright-core";
+import { BrowserAutomationError } from "../errors.js";
 import type { Logger } from "../observe/logger.js";
 import type { ActionTrace } from "../observe/trace.js";
 import { PopupDismisser } from "./resilience.js";
+
+export interface StructuredError {
+	code: string;
+	message: string;
+	recoveryHint: string;
+}
 
 export interface ActionResult<T = unknown> {
 	ok: boolean;
 	data?: T;
 	error?: string;
+	structuredError?: StructuredError;
 	retries: number;
 	durationMs: number;
 	screenshot?: string;
+}
+
+export function toStructuredError(err: unknown): string | StructuredError {
+	if (err instanceof BrowserAutomationError) {
+		return { code: err.code, message: err.message, recoveryHint: err.recoveryHint };
+	}
+	if (err instanceof Error) {
+		return err.message;
+	}
+	return String(err);
 }
 
 export type TimeoutTier = "short" | "medium" | "long";
@@ -79,11 +97,13 @@ export async function executeAction<T>(
 	const timeoutMs = resolveTimeout(opts.timeout);
 	const startedAt = performance.now();
 	let lastError = "";
+	let lastCaughtError: unknown;
 	const popupDismisser = new PopupDismisser(ctx.page, ctx.logger);
 	popupDismisser.start();
 
 	try {
 		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			lastCaughtError = undefined;
 			try {
 				await popupDismisser.dismissOnce();
 				const outcome = await runAttempt(ctx, opts, fn, timeoutMs);
@@ -105,6 +125,7 @@ export async function executeAction<T>(
 				lastError = outcome.error;
 				ctx.logger.warn({ action: name, attempt }, lastError);
 			} catch (err) {
+				lastCaughtError = err;
 				lastError = err instanceof Error ? err.message : String(err);
 				ctx.logger.warn({ action: name, attempt, error: lastError }, "action attempt failed");
 			}
@@ -114,7 +135,7 @@ export async function executeAction<T>(
 			}
 		}
 
-		return buildFailureResult(ctx, name, lastError, maxRetries, startedAt, opts);
+		return buildFailureResult(ctx, name, lastError, lastCaughtError, maxRetries, startedAt, opts);
 	} finally {
 		popupDismisser.stop();
 	}
@@ -124,16 +145,21 @@ async function buildFailureResult<T>(
 	ctx: ActionContext,
 	name: string,
 	lastError: string,
+	lastCaughtError: unknown,
 	maxRetries: number,
 	startedAt: number,
 	opts: ActionOptions,
 ): Promise<ActionResult<T>> {
+	const structured = toStructuredError(lastCaughtError ?? lastError);
 	const result: ActionResult<T> = {
 		ok: false,
 		error: lastError,
 		retries: maxRetries,
 		durationMs: Math.round(performance.now() - startedAt),
 	};
+	if (typeof structured === "object") {
+		result.structuredError = structured;
+	}
 
 	if (opts.screenshotOnFailure !== false) {
 		try {
