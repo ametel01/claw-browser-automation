@@ -1,7 +1,11 @@
 import type { Page } from "playwright-core";
-import { BrowserAutomationError } from "../errors.js";
+import {
+	BrowserAutomationError,
+	NavigationInterruptedError,
+	TargetNotFoundError,
+} from "../errors.js";
 import type { Logger } from "../observe/logger.js";
-import type { ActionTrace } from "../observe/trace.js";
+import type { ActionTrace, SelectorResolutionTrace } from "../observe/trace.js";
 import { PopupDismisser } from "./resilience.js";
 
 export interface StructuredError {
@@ -48,12 +52,26 @@ export function resolveTimeout(timeout: TimeoutTier | number | undefined): numbe
 	return TIMEOUT_VALUES[timeout];
 }
 
+export interface TraceMetadata {
+	selectorResolved?: SelectorResolutionTrace;
+	eventsDispatched?: string[];
+	waitsPerformed?: string[];
+	assertionsChecked?: string[];
+}
+
 export interface ActionContext {
 	page: Page;
 	logger: Logger;
 	screenshotDir?: string;
 	sessionId?: string;
 	trace?: ActionTrace;
+	_traceMeta?: TraceMetadata;
+	_retryState?: RetryState;
+}
+
+export interface RetryState {
+	lastClickSelector?: string;
+	lastClickTime?: number;
 }
 
 export interface ActionOptions {
@@ -62,6 +80,8 @@ export interface ActionOptions {
 	screenshotOnFailure?: boolean;
 	precondition?: (ctx: ActionContext) => Promise<boolean>;
 	postcondition?: (ctx: ActionContext) => Promise<boolean>;
+	/** Internal: mutable array of selector strategies for rotation on retry. */
+	_selectorStrategies?: unknown[];
 }
 
 const DEFAULT_RETRIES = 3;
@@ -87,6 +107,93 @@ async function runAttempt<T>(
 	return { tag: "success", data };
 }
 
+type RetryLoopResult<T> =
+	| { tag: "success"; data: T; attempt: number }
+	| { tag: "exhausted"; lastError: string; lastCaughtError: unknown };
+
+async function retryLoop<T>(
+	ctx: ActionContext,
+	name: string,
+	opts: ActionOptions,
+	fn: (ctx: ActionContext, timeoutMs: number) => Promise<T>,
+	timeoutMs: number,
+	maxRetries: number,
+	startUrl: string,
+	popupDismisser: PopupDismisser,
+): Promise<RetryLoopResult<T>> {
+	let lastError = "";
+	let lastCaughtError: unknown;
+
+	for (let attempt = 0; attempt <= maxRetries; attempt++) {
+		lastCaughtError = undefined;
+
+		const navCheck = checkNavigationGuard(attempt, ctx, startUrl);
+		if (navCheck) {
+			return { tag: "exhausted", lastError: navCheck.message, lastCaughtError: navCheck };
+		}
+
+		try {
+			await popupDismisser.dismissOnce();
+			const outcome = await runAttempt(ctx, opts, fn, timeoutMs);
+			if (outcome.tag === "success") {
+				return { tag: "success", data: outcome.data, attempt };
+			}
+			lastError = outcome.error;
+			ctx.logger.warn({ action: name, attempt }, lastError);
+		} catch (err) {
+			lastCaughtError = err;
+			lastError = err instanceof Error ? err.message : String(err);
+			ctx.logger.warn({ action: name, attempt, error: lastError }, "action attempt failed");
+			handleRetryError(err, opts, ctx, name);
+		}
+
+		if (attempt < maxRetries) {
+			await backoff(attempt);
+		}
+	}
+
+	return { tag: "exhausted", lastError, lastCaughtError };
+}
+
+function checkNavigationGuard(
+	attempt: number,
+	ctx: ActionContext,
+	startUrl: string,
+): NavigationInterruptedError | undefined {
+	if (attempt === 0) {
+		return undefined;
+	}
+	const currentUrl = ctx.page.url();
+	if (currentUrl !== startUrl) {
+		return new NavigationInterruptedError(
+			`page navigated from ${startUrl} to ${currentUrl} during retry`,
+		);
+	}
+	return undefined;
+}
+
+function handleRetryError(
+	err: unknown,
+	opts: ActionOptions,
+	ctx: ActionContext,
+	name: string,
+): void {
+	if (err instanceof TargetNotFoundError && opts._selectorStrategies) {
+		rotateStrategies(opts._selectorStrategies);
+		ctx.logger.debug({ action: name }, "rotated selector strategies for retry");
+	}
+}
+
+function rotateStrategies(strategies: unknown[]): void {
+	if (strategies.length <= 1) {
+		return;
+	}
+	const first = strategies.shift();
+	if (first !== undefined) {
+		strategies.push(first);
+	}
+}
+
 export async function executeAction<T>(
 	ctx: ActionContext,
 	name: string,
@@ -96,46 +203,45 @@ export async function executeAction<T>(
 	const maxRetries = opts.retries ?? DEFAULT_RETRIES;
 	const timeoutMs = resolveTimeout(opts.timeout);
 	const startedAt = performance.now();
-	let lastError = "";
-	let lastCaughtError: unknown;
 	const popupDismisser = new PopupDismisser(ctx.page, ctx.logger);
 	popupDismisser.start();
 
-	try {
-		for (let attempt = 0; attempt <= maxRetries; attempt++) {
-			lastCaughtError = undefined;
-			try {
-				await popupDismisser.dismissOnce();
-				const outcome = await runAttempt(ctx, opts, fn, timeoutMs);
-				if (outcome.tag === "success") {
-					const durationMs = Math.round(performance.now() - startedAt);
-					recordTraceEntry(ctx, name, {
-						timestamp: Date.now(),
-						durationMs,
-						ok: true,
-						retries: attempt,
-					});
-					return {
-						ok: true,
-						data: outcome.data,
-						retries: attempt,
-						durationMs,
-					};
-				}
-				lastError = outcome.error;
-				ctx.logger.warn({ action: name, attempt }, lastError);
-			} catch (err) {
-				lastCaughtError = err;
-				lastError = err instanceof Error ? err.message : String(err);
-				ctx.logger.warn({ action: name, attempt, error: lastError }, "action attempt failed");
-			}
+	ctx._traceMeta = {};
+	ctx._retryState = {};
+	const startUrl = ctx.page.url();
 
-			if (attempt < maxRetries) {
-				await backoff(attempt);
-			}
+	try {
+		const loopResult = await retryLoop(
+			ctx,
+			name,
+			opts,
+			fn,
+			timeoutMs,
+			maxRetries,
+			startUrl,
+			popupDismisser,
+		);
+
+		if (loopResult.tag === "success") {
+			const durationMs = Math.round(performance.now() - startedAt);
+			recordTraceEntry(ctx, name, {
+				timestamp: Date.now(),
+				durationMs,
+				ok: true,
+				retries: loopResult.attempt,
+			});
+			return { ok: true, data: loopResult.data, retries: loopResult.attempt, durationMs };
 		}
 
-		return buildFailureResult(ctx, name, lastError, lastCaughtError, maxRetries, startedAt, opts);
+		return buildFailureResult(
+			ctx,
+			name,
+			loopResult.lastError,
+			loopResult.lastCaughtError,
+			maxRetries,
+			startedAt,
+			opts,
+		);
 	} finally {
 		popupDismisser.stop();
 	}
@@ -197,6 +303,7 @@ function recordTraceEntry(
 	if (!(ctx.trace && ctx.sessionId)) {
 		return;
 	}
+	const meta = ctx._traceMeta;
 	ctx.trace.record(ctx.sessionId, {
 		action,
 		timestamp: entry.timestamp,
@@ -204,6 +311,10 @@ function recordTraceEntry(
 		ok: entry.ok,
 		...(entry.error ? { error: entry.error } : {}),
 		retries: entry.retries,
+		...(meta?.selectorResolved ? { selectorResolved: meta.selectorResolved } : {}),
+		...(meta?.eventsDispatched?.length ? { eventsDispatched: meta.eventsDispatched } : {}),
+		...(meta?.waitsPerformed?.length ? { waitsPerformed: meta.waitsPerformed } : {}),
+		...(meta?.assertionsChecked?.length ? { assertionsChecked: meta.assertionsChecked } : {}),
 	});
 }
 

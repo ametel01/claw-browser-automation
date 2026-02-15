@@ -82,7 +82,7 @@ export interface SelectorResolution {
 
 ---
 
-## Phase 2: Action Engine Hardening — Assertions (#1), Traces (#8), Retries (#9)
+## Phase 2: Action Engine Hardening — Assertions (#1), Traces (#8), Retries (#9) **COMPLETE**
 
 ### #1 — Declarative Postcondition Assertions
 

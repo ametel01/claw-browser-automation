@@ -1,8 +1,49 @@
 import type { Selector } from "../selectors/strategy.js";
-import { resolveFirstVisible, resolveWithConfidence } from "../selectors/strategy.js";
+import { resolveWithConfidence } from "../selectors/strategy.js";
 import type { ActionContext, ActionOptions, ActionResult } from "./action.js";
 import { executeAction, resolveTimeout } from "./action.js";
 import { waitForDomStability } from "./resilience.js";
+
+function buildSelectorRetryOptions(
+	opts: ActionOptions,
+	selector: Selector,
+): { actionOpts: ActionOptions; selectorInput: Selector } {
+	if (!Array.isArray(selector)) {
+		return { actionOpts: opts, selectorInput: selector };
+	}
+	const selectorStrategies = [...selector];
+	return {
+		actionOpts: {
+			...opts,
+			_selectorStrategies: selectorStrategies,
+		},
+		selectorInput: selectorStrategies,
+	};
+}
+
+function recordSelectorMeta(
+	ctx: ActionContext,
+	resolution: { strategy: { type: string }; strategyIndex: number; resolutionMs: number },
+): void {
+	if (!ctx._traceMeta) {
+		ctx._traceMeta = {};
+	}
+	ctx._traceMeta.selectorResolved = {
+		strategy: resolution.strategy.type,
+		strategyIndex: resolution.strategyIndex,
+		resolutionMs: resolution.resolutionMs,
+	};
+}
+
+function recordWait(ctx: ActionContext, waitType: string): void {
+	if (!ctx._traceMeta) {
+		ctx._traceMeta = {};
+	}
+	if (!ctx._traceMeta.waitsPerformed) {
+		ctx._traceMeta.waitsPerformed = [];
+	}
+	ctx._traceMeta.waitsPerformed.push(waitType);
+}
 
 export async function getText(
 	ctx: ActionContext,
@@ -10,9 +51,13 @@ export async function getText(
 	opts: ActionOptions = {},
 ): Promise<ActionResult<string>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
-	return executeAction(ctx, "getText", opts, async (_ctx) => {
+	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
+	return executeAction(ctx, "getText", actionOpts, async (_ctx) => {
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
-		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
+		const resolution = await resolveWithConfidence(_ctx.page, selectorInput, "visible", timeoutMs);
+		recordSelectorMeta(_ctx, resolution);
+		const locator = resolution.locator.first();
 		const text = await locator.innerText({ timeout: timeoutMs });
 		return text.trim();
 	});
@@ -25,9 +70,13 @@ export async function getAttribute(
 	opts: ActionOptions = {},
 ): Promise<ActionResult<string | null>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
-	return executeAction(ctx, "getAttribute", opts, async (_ctx) => {
+	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
+	return executeAction(ctx, "getAttribute", actionOpts, async (_ctx) => {
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
-		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
+		const resolution = await resolveWithConfidence(_ctx.page, selectorInput, "visible", timeoutMs);
+		recordSelectorMeta(_ctx, resolution);
+		const locator = resolution.locator.first();
 		return locator.getAttribute(attribute, { timeout: timeoutMs });
 	});
 }
@@ -43,10 +92,13 @@ export async function getAll(
 ): Promise<ActionResult<ExtractedItem[]>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
 	const attrs = opts.attributes ?? ["textContent"];
+	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
 
-	return executeAction(ctx, "getAll", opts, async (_ctx) => {
+	return executeAction(ctx, "getAll", actionOpts, async (_ctx) => {
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
-		const resolution = await resolveWithConfidence(_ctx.page, selector, "attached", timeoutMs);
+		const resolution = await resolveWithConfidence(_ctx.page, selectorInput, "attached", timeoutMs);
+		recordSelectorMeta(_ctx, resolution);
 		const locator = resolution.locator;
 		await locator.first().waitFor({ state: "attached", timeout: timeoutMs });
 

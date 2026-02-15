@@ -3,6 +3,7 @@ import { chromium } from "playwright-core";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ActionContext } from "../../src/actions/action.js";
 import { executeAction } from "../../src/actions/action.js";
+import { assertElementVisible } from "../../src/actions/assertions.js";
 import { getAll, getPageContent, getText } from "../../src/actions/extract.js";
 import { click, fill, type as typeAction } from "../../src/actions/interact.js";
 import { navigate } from "../../src/actions/navigate.js";
@@ -274,5 +275,86 @@ describe("Action Engine", () => {
 		expect(result.ok).toBe(false);
 		expect(result.error).toBe("postcondition failed");
 		expect(result.structuredError).toBeUndefined();
+	});
+
+	it("should enrich trace entries with selector, waits, events, and assertions metadata", async () => {
+		await setup('<button id="btn">Click</button>');
+		const trace = new ActionTrace();
+		ctx.trace = trace;
+		ctx.sessionId = "trace-meta-session";
+
+		const result = await click(ctx, "#btn", {
+			retries: 0,
+			postcondition: assertElementVisible("#btn"),
+		});
+		expect(result.ok).toBe(true);
+
+		const entry = trace.getSessionTrace("trace-meta-session")[0];
+		expect(entry?.selectorResolved?.strategy).toBe("css");
+		expect(entry?.waitsPerformed).toContain("domStability");
+		expect(entry?.eventsDispatched).toContain("click");
+		expect(entry?.assertionsChecked?.[0]).toContain("elementVisible");
+	});
+
+	it("should abort retries when URL changes mid-action", async () => {
+		await setup("<p>Navigation guard</p>");
+		let attempts = 0;
+
+		const result = await executeAction(
+			ctx,
+			"navigation-guard",
+			{ retries: 1, timeout: "short" },
+			async (_ctx) => {
+				attempts += 1;
+				await _ctx.page.goto("data:text/html,<p>new page</p>");
+				throw new Error("first attempt failed after navigation");
+			},
+		);
+
+		expect(result.ok).toBe(false);
+		expect(result.structuredError?.code).toBe("NAVIGATION_INTERRUPTED");
+		expect(attempts).toBe(1);
+	});
+
+	it("should rotate selector strategies after TargetNotFoundError", async () => {
+		await setup("<p>selector rotation</p>");
+		const strategies: unknown[] = [
+			{ type: "css", selector: "#first" },
+			{ type: "css", selector: "#second" },
+		];
+		let attempts = 0;
+
+		const result = await executeAction(
+			ctx,
+			"rotate-selectors",
+			{ retries: 1, _selectorStrategies: strategies },
+			async () => {
+				attempts += 1;
+				if (attempts === 1) {
+					throw new TargetNotFoundError("not found");
+				}
+			},
+		);
+
+		expect(result.ok).toBe(true);
+		expect((strategies[0] as { selector: string }).selector).toBe("#second");
+		expect((strategies[1] as { selector: string }).selector).toBe("#first");
+	});
+
+	it("should skip duplicate click on retry within 500ms", async () => {
+		await setup(`
+			<button id="btn" onclick="window.__clicks = (window.__clicks || 0) + 1">Click</button>
+		`);
+
+		const result = await click(ctx, "#btn", {
+			retries: 1,
+			postcondition: async () => false,
+		});
+
+		expect(result.ok).toBe(false);
+		const clicks = await page.evaluate(
+			() => (window as Window & { __clicks?: number }).__clicks ?? 0,
+		);
+		expect(clicks).toBe(1);
 	});
 });

@@ -1,9 +1,62 @@
 import { AssertionFailedError } from "../errors.js";
 import type { Selector } from "../selectors/strategy.js";
-import { resolveFirstVisible } from "../selectors/strategy.js";
+import { resolveFirstVisible, resolveWithConfidence } from "../selectors/strategy.js";
 import type { ActionContext, ActionOptions, ActionResult } from "./action.js";
 import { executeAction, resolveTimeout } from "./action.js";
 import { waitForDomStability } from "./resilience.js";
+
+const DEDUP_CLICK_MS = 500;
+
+function buildSelectorRetryOptions(
+	opts: ActionOptions,
+	selector: Selector,
+): { actionOpts: ActionOptions; selectorInput: Selector } {
+	if (!Array.isArray(selector)) {
+		return { actionOpts: opts, selectorInput: selector };
+	}
+	const selectorStrategies = [...selector];
+	return {
+		actionOpts: {
+			...opts,
+			_selectorStrategies: selectorStrategies,
+		},
+		selectorInput: selectorStrategies,
+	};
+}
+
+function recordSelectorMeta(
+	ctx: ActionContext,
+	resolution: { strategy: { type: string }; strategyIndex: number; resolutionMs: number },
+): void {
+	if (!ctx._traceMeta) {
+		ctx._traceMeta = {};
+	}
+	ctx._traceMeta.selectorResolved = {
+		strategy: resolution.strategy.type,
+		strategyIndex: resolution.strategyIndex,
+		resolutionMs: resolution.resolutionMs,
+	};
+}
+
+function recordWait(ctx: ActionContext, waitType: string): void {
+	if (!ctx._traceMeta) {
+		ctx._traceMeta = {};
+	}
+	if (!ctx._traceMeta.waitsPerformed) {
+		ctx._traceMeta.waitsPerformed = [];
+	}
+	ctx._traceMeta.waitsPerformed.push(waitType);
+}
+
+function recordEvent(ctx: ActionContext, eventName: string): void {
+	if (!ctx._traceMeta) {
+		ctx._traceMeta = {};
+	}
+	if (!ctx._traceMeta.eventsDispatched) {
+		ctx._traceMeta.eventsDispatched = [];
+	}
+	ctx._traceMeta.eventsDispatched.push(eventName);
+}
 
 export async function click(
 	ctx: ActionContext,
@@ -11,12 +64,36 @@ export async function click(
 	opts: ActionOptions = {},
 ): Promise<ActionResult<void>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
-	return executeAction(ctx, "click", opts, async (_ctx) => {
+	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
+	const selectorKey = typeof selector === "string" ? selector : JSON.stringify(selector);
+	return executeAction(ctx, "click", actionOpts, async (_ctx) => {
+		// Duplicate click prevention
+		const retryState = _ctx._retryState;
+		if (retryState?.lastClickSelector === selectorKey && retryState.lastClickTime) {
+			const elapsed = Date.now() - retryState.lastClickTime;
+			if (elapsed < DEDUP_CLICK_MS) {
+				_ctx.logger.debug({ selector: selectorKey, elapsed }, "skipping duplicate click");
+				return;
+			}
+		}
+
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
-		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
+		const resolution = await resolveWithConfidence(_ctx.page, selectorInput, "visible", timeoutMs);
+		recordSelectorMeta(_ctx, resolution);
+		const locator = resolution.locator.first();
 		await locator.scrollIntoViewIfNeeded({ timeout: timeoutMs });
 		await locator.click({ timeout: timeoutMs });
+		recordEvent(_ctx, "click");
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
+
+		// Track for dedup
+		if (!_ctx._retryState) {
+			_ctx._retryState = {};
+		}
+		_ctx._retryState.lastClickSelector = selectorKey;
+		_ctx._retryState.lastClickTime = Date.now();
 	});
 }
 
@@ -36,17 +113,23 @@ export async function type(
 	opts: TypeOptions = {},
 ): Promise<ActionResult<void>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
-	return executeAction(ctx, "type", opts, async (_ctx) => {
+	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
+	return executeAction(ctx, "type", actionOpts, async (_ctx) => {
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
-		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
+		const resolution = await resolveWithConfidence(_ctx.page, selectorInput, "visible", timeoutMs);
+		recordSelectorMeta(_ctx, resolution);
+		const locator = resolution.locator.first();
 		if (opts.clear !== false) {
 			await locator.clear({ timeout: timeoutMs });
 		}
 		if (opts.sequential) {
 			const delay = opts.delayMs ?? 80;
 			await locator.pressSequentially(text, { delay, timeout: timeoutMs });
+			recordEvent(_ctx, "typeSequential");
 		} else {
 			await locator.fill(text, { timeout: timeoutMs });
+			recordEvent(_ctx, "fill");
 			const value = await locator.inputValue({ timeout: timeoutMs });
 			if (value !== text) {
 				throw new AssertionFailedError(
@@ -64,10 +147,15 @@ export async function selectOption(
 	opts: ActionOptions = {},
 ): Promise<ActionResult<string[]>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
-	return executeAction(ctx, "selectOption", opts, async (_ctx) => {
+	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
+	return executeAction(ctx, "selectOption", actionOpts, async (_ctx) => {
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
-		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
+		const resolution = await resolveWithConfidence(_ctx.page, selectorInput, "visible", timeoutMs);
+		recordSelectorMeta(_ctx, resolution);
+		const locator = resolution.locator.first();
 		const selected = await locator.selectOption(value, { timeout: timeoutMs });
+		recordEvent(_ctx, "selectOption");
 		const expected = Array.isArray(value) ? value : [value];
 		for (const entry of expected) {
 			if (!selected.includes(entry)) {
@@ -84,9 +172,13 @@ export async function check(
 	opts: ActionOptions = {},
 ): Promise<ActionResult<void>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
-	return executeAction(ctx, "check", opts, async (_ctx) => {
-		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
+	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
+	return executeAction(ctx, "check", actionOpts, async (_ctx) => {
+		const resolution = await resolveWithConfidence(_ctx.page, selectorInput, "visible", timeoutMs);
+		recordSelectorMeta(_ctx, resolution);
+		const locator = resolution.locator.first();
 		await locator.check({ timeout: timeoutMs });
+		recordEvent(_ctx, "check");
 		if (!(await locator.isChecked({ timeout: timeoutMs }))) {
 			throw new AssertionFailedError("check verification failed");
 		}
@@ -99,9 +191,13 @@ export async function uncheck(
 	opts: ActionOptions = {},
 ): Promise<ActionResult<void>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
-	return executeAction(ctx, "uncheck", opts, async (_ctx) => {
-		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
+	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
+	return executeAction(ctx, "uncheck", actionOpts, async (_ctx) => {
+		const resolution = await resolveWithConfidence(_ctx.page, selectorInput, "visible", timeoutMs);
+		recordSelectorMeta(_ctx, resolution);
+		const locator = resolution.locator.first();
 		await locator.uncheck({ timeout: timeoutMs });
+		recordEvent(_ctx, "uncheck");
 		if (await locator.isChecked({ timeout: timeoutMs })) {
 			throw new AssertionFailedError("uncheck verification failed");
 		}
@@ -114,10 +210,15 @@ export async function hover(
 	opts: ActionOptions = {},
 ): Promise<ActionResult<void>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
-	return executeAction(ctx, "hover", opts, async (_ctx) => {
+	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
+	return executeAction(ctx, "hover", actionOpts, async (_ctx) => {
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
-		const locator = await resolveFirstVisible(_ctx.page, selector, timeoutMs);
+		const resolution = await resolveWithConfidence(_ctx.page, selectorInput, "visible", timeoutMs);
+		recordSelectorMeta(_ctx, resolution);
+		const locator = resolution.locator.first();
 		await locator.hover({ timeout: timeoutMs });
+		recordEvent(_ctx, "hover");
 	});
 }
 
@@ -129,10 +230,13 @@ export async function dragAndDrop(
 ): Promise<ActionResult<void>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
 	return executeAction(ctx, "dragAndDrop", opts, async (_ctx) => {
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
 		const sourceLocator = await resolveFirstVisible(_ctx.page, source, timeoutMs);
 		const targetLocator = await resolveFirstVisible(_ctx.page, target, timeoutMs);
 		await sourceLocator.dragTo(targetLocator, { timeout: timeoutMs });
+		recordEvent(_ctx, "dragAndDrop");
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
 	});
 }
@@ -149,6 +253,7 @@ export async function fill(
 ): Promise<ActionResult<FillFieldsResult>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
 	return executeAction(ctx, "fill", opts, async (_ctx) => {
+		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
 		const filled: string[] = [];
 		const failed: string[] = [];
@@ -158,6 +263,7 @@ export async function fill(
 				const locator = await resolveFirstVisible(_ctx.page, selectorStr, timeoutMs);
 				await locator.clear({ timeout: timeoutMs });
 				await locator.fill(value, { timeout: timeoutMs });
+				recordEvent(_ctx, "fill");
 				const actual = await locator.inputValue({ timeout: timeoutMs });
 				if (actual !== value) {
 					throw new AssertionFailedError(`fill verification failed for ${selectorStr}`);

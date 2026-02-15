@@ -109,8 +109,17 @@ export type {
 	ActionOptions,
 	ActionResult,
 	StructuredError,
+	TraceMetadata,
 } from "./actions/action.js";
+export type { AssertionCheck } from "./actions/assertions.js";
 // biome-ignore lint/performance/noBarrelFile: index.ts is the package public API surface
+export {
+	allOf,
+	assertElementGone,
+	assertElementText,
+	assertElementVisible,
+	assertUrlContains,
+} from "./actions/assertions.js";
 export {
 	AssertionFailedError,
 	BrowserAutomationError,
@@ -120,7 +129,7 @@ export {
 	TargetNotFoundError,
 	TimeoutExceededError,
 } from "./errors.js";
-export type { TraceEntry, TraceStats } from "./observe/trace.js";
+export type { SelectorResolutionTrace, TraceEntry, TraceStats } from "./observe/trace.js";
 export type { PoolStatus } from "./pool/browser-pool.js";
 export type { SelectorResolution, SelectorStrategy } from "./selectors/strategy.js";
 export type { CookieData, SessionSnapshot } from "./session/snapshot.js";

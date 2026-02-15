@@ -1,3 +1,9 @@
+export interface SelectorResolutionTrace {
+	strategy: string;
+	strategyIndex: number;
+	resolutionMs: number;
+}
+
 export interface TraceEntry {
 	action: string;
 	selector?: string;
@@ -6,6 +12,10 @@ export interface TraceEntry {
 	ok: boolean;
 	error?: string;
 	retries: number;
+	selectorResolved?: SelectorResolutionTrace;
+	eventsDispatched?: string[];
+	waitsPerformed?: string[];
+	assertionsChecked?: string[];
 }
 
 export interface TraceStats {
