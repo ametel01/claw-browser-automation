@@ -97,13 +97,33 @@ export async function click(
 	});
 }
 
+export type InputMode = "fill" | "sequential" | "paste" | "nativeSetter";
+
 export interface TypeOptions extends ActionOptions {
 	clear?: boolean;
 	/** Use sequential key presses instead of programmatic fill.
-	 *  Essential for autocomplete/combobox inputs that rely on per-keystroke events. */
+	 *  Essential for autocomplete/combobox inputs that rely on per-keystroke events.
+	 *  @deprecated Use `mode: "sequential"` instead. */
 	sequential?: boolean;
 	/** Delay between key presses in ms when sequential is true. Default: 80 */
 	delayMs?: number;
+	/** Input mode strategy. Takes precedence over `sequential` when set.
+	 *  - "fill" (default): Playwright `locator.fill()` with verification
+	 *  - "sequential": `locator.pressSequentially()` for per-keystroke events
+	 *  - "paste": Dispatch ClipboardEvent with DataTransfer (bypasses key event handlers)
+	 *  - "nativeSetter": Use HTMLInputElement.prototype.value setter + input/change/blur events
+	 *    (for React/Vue controlled inputs) */
+	mode?: InputMode;
+}
+
+function resolveInputMode(opts: TypeOptions): InputMode {
+	if (opts.mode) {
+		return opts.mode;
+	}
+	if (opts.sequential) {
+		return "sequential";
+	}
+	return "fill";
 }
 
 export async function type(
@@ -114,6 +134,7 @@ export async function type(
 ): Promise<ActionResult<void>> {
 	const timeoutMs = resolveTimeout(opts.timeout);
 	const { actionOpts, selectorInput } = buildSelectorRetryOptions(opts, selector);
+	const mode = resolveInputMode(opts);
 	return executeAction(ctx, "type", actionOpts, async (_ctx) => {
 		recordWait(_ctx, "domStability");
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
@@ -123,21 +144,73 @@ export async function type(
 		if (opts.clear !== false) {
 			await locator.clear({ timeout: timeoutMs });
 		}
-		if (opts.sequential) {
-			const delay = opts.delayMs ?? 80;
+		await applyInputMode(_ctx, locator, text, mode, timeoutMs, opts.delayMs);
+	});
+}
+
+async function applyInputMode(
+	ctx: ActionContext,
+	locator: Awaited<ReturnType<typeof resolveFirstVisible>>,
+	text: string,
+	mode: InputMode,
+	timeoutMs: number,
+	delayMs?: number,
+): Promise<void> {
+	switch (mode) {
+		case "sequential": {
+			const delay = delayMs ?? 80;
 			await locator.pressSequentially(text, { delay, timeout: timeoutMs });
-			recordEvent(_ctx, "typeSequential");
-		} else {
+			recordEvent(ctx, "typeSequential");
+			break;
+		}
+		case "paste": {
+			await locator.evaluate((el, value) => {
+				const input = el as HTMLInputElement;
+				input.focus();
+				const dt = new DataTransfer();
+				dt.setData("text/plain", value);
+				const event = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true });
+				input.dispatchEvent(event);
+				// Fallback: if paste didn't populate the value, set directly
+				if (input.value !== value) {
+					input.value = value;
+					input.dispatchEvent(new Event("input", { bubbles: true }));
+					input.dispatchEvent(new Event("change", { bubbles: true }));
+				}
+			}, text);
+			recordEvent(ctx, "paste");
+			break;
+		}
+		case "nativeSetter": {
+			await locator.evaluate((el, value) => {
+				const input = el as HTMLInputElement;
+				input.focus();
+				const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+				if (setter) {
+					setter.call(input, value);
+				} else {
+					input.value = value;
+				}
+				input.dispatchEvent(new Event("input", { bubbles: true }));
+				input.dispatchEvent(new Event("change", { bubbles: true }));
+				input.dispatchEvent(new Event("blur", { bubbles: true }));
+			}, text);
+			recordEvent(ctx, "nativeSetter");
+			break;
+		}
+		default: {
+			// "fill" mode
 			await locator.fill(text, { timeout: timeoutMs });
-			recordEvent(_ctx, "fill");
+			recordEvent(ctx, "fill");
 			const value = await locator.inputValue({ timeout: timeoutMs });
 			if (value !== text) {
 				throw new AssertionFailedError(
 					`type verification failed: expected "${text}", got "${value}"`,
 				);
 			}
+			break;
 		}
-	});
+	}
 }
 
 export async function selectOption(

@@ -199,9 +199,10 @@ describe("Tool definitions", () => {
 			expect(names).toContain("browser_fill_form");
 			expect(names).toContain("browser_extract_text");
 			expect(names).toContain("browser_extract_all");
+			expect(names).toContain("browser_extract_structured");
 			expect(names).toContain("browser_wait");
 			expect(names).toContain("browser_get_content");
-			expect(tools).toHaveLength(9);
+			expect(tools).toHaveLength(10);
 		});
 
 		it("should have unique names", () => {
@@ -290,14 +291,14 @@ describe("Tool definitions", () => {
 			expect(new Set(allNames).size).toBe(allNames.length);
 		});
 
-		it("should total 19 tools", () => {
+		it("should total 20 tools", () => {
 			const sessionTools = createSessionTools(ctx);
 			const actionTools = createActionTools(ctx);
 			const pageTools = createPageTools(ctx);
 			const approvalTools = createApprovalTools(ctx);
 			const total =
 				sessionTools.length + actionTools.length + pageTools.length + approvalTools.length;
-			expect(total).toBe(19);
+			expect(total).toBe(20);
 		});
 
 		it("all tool names should start with browser_", () => {

@@ -1,5 +1,6 @@
-import { Type } from "@sinclair/typebox";
+import { type TObject, type TProperties, Type } from "@sinclair/typebox";
 import { getAll, getPageContent, getText } from "../actions/extract.js";
+import { extractStructured } from "../actions/extract-structured.js";
 import { click, fill, selectOption, type as typeAction } from "../actions/interact.js";
 import { navigate } from "../actions/navigate.js";
 import { waitForCondition, waitForSelector } from "../actions/wait.js";
@@ -80,22 +81,36 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 			name: "browser_type",
 			description:
 				"Type text into an input field, clearing it first by default. " +
-				"Use sequential mode for autocomplete/combobox inputs that need per-keystroke events.",
+				"Choose a mode: fill (default), sequential (per-keystroke), paste (clipboard), " +
+				"or nativeSetter (for React/Vue controlled inputs).",
 			label: "Type",
 			parameters: Type.Object({
 				sessionId: Type.String({ description: "Session ID" }),
 				selector: Type.String({ description: "CSS selector of the input field" }),
 				text: Type.String({ description: "Text to type" }),
+				mode: Type.Optional(
+					Type.Union(
+						[
+							Type.Literal("fill"),
+							Type.Literal("sequential"),
+							Type.Literal("paste"),
+							Type.Literal("nativeSetter"),
+						],
+						{
+							description:
+								"Input mode: fill (programmatic, default), sequential (per-keystroke), " +
+								"paste (clipboard event), nativeSetter (React/Vue compatible value setter)",
+						},
+					),
+				),
 				sequential: Type.Optional(
 					Type.Boolean({
-						description:
-							"Type character-by-character with key events instead of programmatic fill. " +
-							"Use this for autocomplete/search inputs that react to keystrokes.",
+						description: "Deprecated: use mode='sequential' instead.",
 					}),
 				),
 				delayMs: Type.Optional(
 					Type.Number({
-						description: "Delay between key presses in ms when sequential is true (default: 80)",
+						description: "Delay between key presses in ms when mode is sequential (default: 80)",
 					}),
 				),
 			}),
@@ -103,19 +118,22 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 				const sessionId = params["sessionId"] as string;
 				const selector = params["selector"] as string;
 				const text = params["text"] as string;
+				const mode = params["mode"] as "fill" | "sequential" | "paste" | "nativeSetter" | undefined;
 				const sequential = params["sequential"] as boolean | undefined;
 				const delayMs = params["delayMs"] as number | undefined;
 				const session = getSession(ctx, sessionId);
 				const actx = makeActionContext(ctx, session);
 				const opts: Parameters<typeof typeAction>[3] = {};
-				if (sequential) {
+				if (mode) {
+					opts.mode = mode;
+				} else if (sequential) {
 					opts.sequential = true;
 				}
 				if (delayMs !== undefined) {
 					opts.delayMs = delayMs;
 				}
 				const result = await typeAction(actx, selector, text, opts);
-				logAction(ctx, sessionId, "type", result, selector, { text, sequential, delayMs });
+				logAction(ctx, sessionId, "type", result, selector, { text, mode, sequential, delayMs });
 				if (!result.ok) {
 					throw new Error(result.error ?? "type failed");
 				}
@@ -289,6 +307,51 @@ export function createActionTools(ctx: SkillContext): ToolDefinition[] {
 					throw new Error(result.error ?? "get content failed");
 				}
 				return jsonResult({ content: result.data });
+			},
+		},
+		{
+			name: "browser_extract_structured",
+			description:
+				"Extract structured data from matching elements using a field mapping. " +
+				"Each field name maps to an HTML attribute (or 'textContent'/'innerHTML'). " +
+				"Returns typed data with provenance showing which DOM node produced each item.",
+			label: "Extract Structured",
+			parameters: Type.Object({
+				sessionId: Type.String({ description: "Session ID" }),
+				selector: Type.String({
+					description: "CSS selector matching the elements to extract from",
+				}),
+				fields: Type.Record(Type.String(), Type.String(), {
+					description:
+						"Map of output field names to HTML attributes. " +
+						"Use 'textContent' for text, 'innerHTML' for HTML, or any attribute name (href, src, etc.)",
+				}),
+				limit: Type.Optional(Type.Number({ description: "Maximum number of items to extract" })),
+			}),
+			async execute(params) {
+				const sessionId = params["sessionId"] as string;
+				const selector = params["selector"] as string;
+				const fields = params["fields"] as Record<string, string>;
+				const limit = params["limit"] as number | undefined;
+				const session = getSession(ctx, sessionId);
+				const actx = makeActionContext(ctx, session);
+
+				const schemaProps: Record<string, ReturnType<typeof Type.String>> = {};
+				for (const [key, desc] of Object.entries(fields)) {
+					schemaProps[key] = Type.String({ description: desc });
+				}
+				const schema = Type.Object(schemaProps) as TObject<TProperties>;
+
+				const opts = limit !== undefined ? { limit } : {};
+				const result = await extractStructured(actx, selector, schema, opts);
+				logAction(ctx, sessionId, "extract_structured", result, selector, { fields, limit });
+				if (!result.ok) {
+					throw new Error(result.error ?? "extract structured failed");
+				}
+				return jsonResult({
+					items: result.data?.data,
+					provenance: result.data?.provenance,
+				});
 			},
 		},
 	];

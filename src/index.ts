@@ -120,6 +120,9 @@ export {
 	assertElementVisible,
 	assertUrlContains,
 } from "./actions/assertions.js";
+export type { ExtractionResult, ItemProvenance } from "./actions/extract-structured.js";
+export { extractStructured } from "./actions/extract-structured.js";
+export type { InputMode } from "./actions/interact.js";
 export {
 	AssertionFailedError,
 	BrowserAutomationError,

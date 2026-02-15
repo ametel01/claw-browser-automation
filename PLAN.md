@@ -130,7 +130,7 @@ These are pure factory functions compatible with existing `ActionOptions.postcon
 
 ---
 
-## Phase 3: Input Modes (#3) + Structured Extraction (#7)
+## Phase 3: Input Modes (#3) + Structured Extraction (#7) **COMPLETE**
 
 ### #3 — Robust Input Modes
 
