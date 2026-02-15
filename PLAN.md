@@ -118,7 +118,7 @@ claw-browser-automation/
 
 ---
 
-## Phase 0 — Project Bootstrap
+## Phase 0 — Project Bootstrap **COMPLETE**
 
 ### 0.1 Init & Dependencies
 

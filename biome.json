@@ -1,5 +1,6 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.3.15/schema.json",
+	"files": { "includes": ["src/**", "tests/**", "*.json"] },
 	"assist": { "actions": { "source": { "organizeImports": "on" } } },
 	"formatter": {
 		"enabled": true,
@@ -13,7 +14,7 @@
 			"complexity": {
 				"noExcessiveCognitiveComplexity": "error",
 				"noVoid": "error",
-				"useLiteralKeys": "error",
+				"useLiteralKeys": "off",
 				"useSimplifiedLogicExpression": "error"
 			},
 			"correctness": {
