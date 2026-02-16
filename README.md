@@ -34,12 +34,10 @@ The agent (clawbot) is the workflow engine — it decides *what* to do. This lay
 
 ## Quick start
 
-### 1. Install dependencies and build
+### 1. Install as an OpenClaw plugin
 
 ```bash
-cd claw-browser-automation
-bun install
-bun run build
+openclaw plugins install claw-browser-automation
 ```
 
 ### 2. Install Playwright browsers (first time only)
@@ -48,20 +46,13 @@ bun run build
 npx playwright install chromium
 ```
 
-### 3. Register with OpenClaw
+### 3. Configure (optional)
 
-Add the skill to your OpenClaw config at `~/.openclaw/openclaw.json`:
+All configuration has sensible defaults. To customize, edit `~/.openclaw/openclaw.json`:
 
 ```jsonc
 {
   "skills": {
-    "install": {
-      "nodeManager": "bun"
-    },
-    "load": {
-      // Tell OpenClaw to scan the parent directory for skills
-      "extraDirs": ["/path/to/your/source"]
-    },
     "entries": {
       "browser-automation": {
         "enabled": true,
@@ -75,15 +66,53 @@ Add the skill to your OpenClaw config at `~/.openclaw/openclaw.json`:
 }
 ```
 
-Replace `/path/to/your/source` with the directory containing this project.
-
 ### 4. Start OpenClaw
 
 ```bash
 openclaw start
 ```
 
-The browser automation skill loads automatically. The agent now has access to 19 browser tools and can perform any browser task you ask for via Telegram, the CLI, or any other configured channel.
+The browser automation plugin loads automatically. The agent now has access to 19 browser tools and can perform any browser task you ask for via Telegram, the CLI, or any other configured channel.
+
+### Alternative: install from source
+
+If you prefer to work from a local checkout instead of the published package:
+
+```bash
+git clone https://github.com/ametel01/claw-browser-automation
+cd claw-browser-automation
+bun install
+bun run build
+```
+
+Then point OpenClaw at the source tree in `~/.openclaw/openclaw.json`:
+
+```jsonc
+{
+  "skills": {
+    "load": {
+      "extraDirs": ["/path/to/claw-browser-automation"]
+    }
+  }
+}
+```
+
+### Programmatic usage
+
+You can also use the library directly without OpenClaw:
+
+```typescript
+import { createSkill } from "claw-browser-automation";
+
+const skill = await createSkill({
+  maxContexts: 4,
+  headless: true,
+});
+
+// skill.tools — array of 19 ToolDefinition objects
+// skill.context — internal state (pool, store, trace, etc.)
+// skill.shutdown() — graceful shutdown
+```
 
 ## How it works with OpenClaw
 
@@ -157,20 +186,7 @@ All configuration is optional. Defaults work out of the box.
 | `artifactsDir` | `~/.openclaw/workspace/browser-automation/artifacts` | Screenshot and DOM snapshot storage |
 | `logLevel` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
-Pass these via the `config` key in your `openclaw.json` skill entry, or programmatically:
-
-```typescript
-import { createSkill } from "claw-browser-automation";
-
-const skill = await createSkill({
-  maxContexts: 4,
-  headless: true,
-});
-
-// skill.tools — array of 19 ToolDefinition objects
-// skill.context — internal state (pool, store, trace, etc.)
-// skill.shutdown() — graceful shutdown
-```
+Pass these via the `config` key in your `openclaw.json` skill entry, or programmatically via `createSkill()` (see [Quick start](#quick-start)).
 
 ## Reliability features
 
@@ -209,7 +225,7 @@ The agent can suspend a session, shut down, restart hours later, and resume exac
 
 ```bash
 bun run build        # Compile TypeScript to dist/
-bun run test         # Run all tests (106 tests across 7 files)
+bun run test         # Run all tests (183 tests across 12 files)
 bun run test:watch   # Watch mode
 bun run check        # Biome lint + format check
 bun run check:fix    # Auto-fix lint/format issues
@@ -232,7 +248,8 @@ for i in {1..10}; do bun run test -- tests/integration/integration.test.ts || ex
 
 ```
 src/
-├── index.ts                # Skill entry point — createSkill()
+├── index.ts                # Library entry point — createSkill()
+├── plugin.ts               # OpenClaw plugin adapter — register(api)
 ├── pool/
 │   ├── browser-pool.ts     # Session lifecycle, max-context enforcement
 │   └── health.ts           # Health probes, circuit breaker recovery

@@ -1,0 +1,15 @@
+{
+	"id": "browser-automation",
+	"name": "Browser Automation",
+	"description": "Reliable browser automation layer for OpenClaw using Playwright",
+	"configSchema": {
+		"type": "object",
+		"properties": {
+			"maxContexts": { "type": "number" },
+			"headless": { "type": "boolean" },
+			"dbPath": { "type": "string" },
+			"artifactsDir": { "type": "string" }
+		},
+		"additionalProperties": false
+	}
+}
