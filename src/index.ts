@@ -22,6 +22,8 @@ export interface SkillConfig {
 	dbPath?: string;
 	artifactsDir?: string;
 	logLevel?: string;
+	traceMaxEntriesPerSession?: number;
+	traceMaxDurationSamples?: number;
 }
 
 export interface BrowserAutomationSkill {
@@ -51,7 +53,17 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 		artifactOpts.baseDir = config.artifactsDir;
 	}
 	const artifacts = new ArtifactManager(artifactOpts);
-	const trace = new ActionTrace();
+	const traceOpts: {
+		maxEntriesPerSession?: number;
+		maxDurationSamples?: number;
+	} = {};
+	if (config.traceMaxEntriesPerSession !== undefined) {
+		traceOpts.maxEntriesPerSession = config.traceMaxEntriesPerSession;
+	}
+	if (config.traceMaxDurationSamples !== undefined) {
+		traceOpts.maxDurationSamples = config.traceMaxDurationSamples;
+	}
+	const trace = new ActionTrace(traceOpts);
 
 	// Suspend any sessions that were active when the process last exited
 	const suspended = sessions.suspendAll();

@@ -117,4 +117,38 @@ describe("ActionTrace", () => {
 		expect(trace.stats().actionsTotal).toBe(0);
 		expect(trace.stats().sessionsTotal).toBe(0);
 	});
+
+	it("should cap per-session trace length", () => {
+		trace = new ActionTrace({ maxEntriesPerSession: 2 });
+
+		trace.record("bounded", makeEntry({ action: "open", timestamp: 1, durationMs: 10 }));
+		trace.record("bounded", makeEntry({ action: "click", timestamp: 2, durationMs: 20 }));
+		trace.record(
+			"bounded",
+			makeEntry({ action: "type", timestamp: 3, durationMs: 30, retries: 1 }),
+		);
+
+		const entries = trace.getSessionTrace("bounded");
+		expect(entries).toHaveLength(2);
+		expect(entries[0]?.action).toBe("click");
+		expect(entries[1]?.action).toBe("type");
+		expect(trace.stats().actionsTotal).toBe(2);
+		expect(trace.stats().actionsByType.type).toBe(1);
+		expect(trace.stats().retriesTotal).toBe(1);
+	});
+
+	it("should bound duration sample history for percentiles", () => {
+		trace = new ActionTrace({ maxDurationSamples: 3 });
+
+		trace.record("bounded", makeEntry({ durationMs: 10, timestamp: 1 }));
+		trace.record("bounded", makeEntry({ durationMs: 20, timestamp: 2 }));
+		trace.record("bounded", makeEntry({ durationMs: 30, timestamp: 3 }));
+		trace.record("bounded", makeEntry({ durationMs: 40, timestamp: 4 }));
+		trace.record("bounded", makeEntry({ durationMs: 50, timestamp: 5 }));
+
+		const stats = trace.stats();
+		expect(stats.durationP50Ms).toBe(40);
+		expect(stats.durationP95Ms).toBe(50);
+		expect(stats.actionsTotal).toBe(5);
+	});
 });
