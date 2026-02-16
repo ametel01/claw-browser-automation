@@ -313,6 +313,7 @@ describe("Action Engine", () => {
 
 		expect(result.ok).toBe(false);
 		expect(result.structuredError?.code).toBe("NAVIGATION_INTERRUPTED");
+		expect(result.retries).toBe(0);
 		expect(attempts).toBe(1);
 	});
 
