@@ -134,15 +134,16 @@ describe("BrowserPool", () => {
 			url: "data:text/html,<h1>health</h1>",
 		});
 		const previousId = session.id;
+		const previousSession = session;
 
 		await session.page.close();
-		await waitFor(
-			() => pool.listSessions().some((trackedSession) => trackedSession.id !== previousId),
-			2000,
-		);
+		await waitFor(() => {
+			const recovered = pool.getSession(previousId);
+			return recovered !== undefined && recovered !== previousSession && recovered.isHealthy();
+		}, 2000);
 
 		expect(pool.status().activeSessions).toBe(1);
-		expect(pool.listSessions()[0]?.id).not.toBe(previousId);
+		expect(pool.getSession(previousId)).toBeDefined();
 	});
 
 	it("should list all active sessions", async () => {

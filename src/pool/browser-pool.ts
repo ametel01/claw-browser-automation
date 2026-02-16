@@ -259,6 +259,7 @@ export class BrowserPool {
 				page,
 				profile: session.profile,
 				logger: this._log,
+				id: session.id,
 			});
 
 			if (snapshot) {
@@ -267,10 +268,7 @@ export class BrowserPool {
 
 			this._sessions.set(replacement.id, replacement);
 			this._health.track(replacement);
-			this._log.info(
-				{ oldSessionId: session.id, sessionId: replacement.id },
-				"unhealthy session recovered",
-			);
+			this._log.info({ sessionId: replacement.id }, "unhealthy session recovered");
 		} catch (err) {
 			this._log.error({ sessionId: session.id, err }, "failed to recover unhealthy session");
 		}

@@ -9,6 +9,7 @@ export interface BrowserSessionOptions {
 	page: Page;
 	profile: string | undefined;
 	logger: Logger;
+	id?: string;
 }
 
 export class BrowserSession {
@@ -21,7 +22,7 @@ export class BrowserSession {
 	private _handles: HandleRegistry | null = null;
 
 	constructor(opts: BrowserSessionOptions) {
-		this.id = nanoid(12);
+		this.id = opts.id ?? nanoid(12);
 		this._page = opts.page;
 		this._context = opts.context;
 		this._profile = opts.profile;
