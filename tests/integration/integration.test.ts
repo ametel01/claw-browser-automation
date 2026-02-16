@@ -33,6 +33,14 @@ import {
 } from "./fixtures.js";
 import { createTestPool, waitFor } from "./helpers.js";
 
+function seedArtifactSession(baseDir: string, sessionId: string, ageMsAgo: number): void {
+	const dir = path.join(baseDir, sessionId);
+	fs.mkdirSync(dir, { recursive: true });
+	const now = Date.now();
+	const timestamp = (now - ageMsAgo) / 1000;
+	fs.utimesSync(dir, new Date(timestamp * 1000), new Date(timestamp * 1000));
+}
+
 // ---------------------------------------------------------------------------
 // 1. Pool lifecycle (20 cycles)
 // ---------------------------------------------------------------------------
@@ -205,8 +213,8 @@ describe("Crash recovery", { timeout: 20_000 }, () => {
 		// Wait for health monitor to detect and recover
 		await waitFor(
 			() => {
-				const sessions = pool.listSessions();
-				return sessions.some((s) => s.id !== originalId);
+				const recovered = pool.getSession(originalId);
+				return recovered !== undefined && recovered !== session && recovered.isHealthy();
 			},
 			10_000,
 			100,
@@ -218,7 +226,7 @@ describe("Crash recovery", { timeout: 20_000 }, () => {
 		expect(status.activeSessions).toBe(1);
 		const recovered = pool.listSessions()[0];
 		expect(recovered).toBeDefined();
-		expect(recovered?.id).not.toBe(originalId);
+		expect(recovered?.id).toBe(originalId);
 	});
 });
 
@@ -651,6 +659,76 @@ describe("Agent-driven multi-step sequence", { timeout: 30_000 }, () => {
 			sessionId,
 		});
 		expectValidToolResult(closeResult);
+	});
+});
+
+describe("Artifact retention", () => {
+	let skill: Awaited<ReturnType<typeof createSkill>> | undefined;
+	let tmpDir = "";
+	let artifactsDir = "";
+
+	afterEach(async () => {
+		if (skill) {
+			await skill.shutdown();
+			skill = undefined;
+		}
+		if (tmpDir) {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("should enforce retention during skill startup", async () => {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claw-artifacts-startup-"));
+		artifactsDir = path.join(tmpDir, "artifacts");
+		fs.mkdirSync(artifactsDir, { recursive: true });
+		seedArtifactSession(artifactsDir, "sess-old", 5000);
+		seedArtifactSession(artifactsDir, "sess-mid", 3000);
+		seedArtifactSession(artifactsDir, "sess-new", 1000);
+
+		skill = await createSkill({
+			maxContexts: 1,
+			headless: true,
+			dbPath: path.join(tmpDir, "startup.db"),
+			artifactsDir,
+			artifactsMaxSessions: 2,
+		});
+
+		const sessions = fs
+			.readdirSync(artifactsDir)
+			.filter((entry) => fs.lstatSync(path.join(artifactsDir, entry)).isDirectory())
+			.sort();
+		expect(sessions).toHaveLength(2);
+		expect(sessions).toContain("sess-mid");
+		expect(sessions).toContain("sess-new");
+		expect(sessions).not.toContain("sess-old");
+	});
+
+	it("should enforce retention during skill shutdown", async () => {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claw-artifacts-shutdown-"));
+		artifactsDir = path.join(tmpDir, "artifacts");
+		skill = await createSkill({
+			maxContexts: 1,
+			headless: true,
+			dbPath: path.join(tmpDir, "shutdown.db"),
+			artifactsDir,
+			artifactsMaxSessions: 2,
+		});
+
+		seedArtifactSession(artifactsDir, "sess-old", 5000);
+		seedArtifactSession(artifactsDir, "sess-mid", 3000);
+		seedArtifactSession(artifactsDir, "sess-new", 1000);
+
+		await skill.shutdown();
+		skill = undefined;
+
+		const sessions = fs
+			.readdirSync(artifactsDir)
+			.filter((entry) => fs.lstatSync(path.join(artifactsDir, entry)).isDirectory())
+			.sort();
+		expect(sessions).toHaveLength(2);
+		expect(sessions).toContain("sess-mid");
+		expect(sessions).toContain("sess-new");
+		expect(sessions).not.toContain("sess-old");
 	});
 });
 

@@ -42,7 +42,7 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - Estimated risk/effort:
 - Low risk, small-to-medium patch.
 
-## P1: Session Recovery Replaces Session IDs Without Persisted-State Reconciliation
+## P1: Session Recovery Replaces Session IDs Without Persisted-State Reconciliation **COMPLETED**
 
 - Why it matters:
 - Auto-recovery currently creates a replacement `session.id`. External actors and persisted stores keyed by old ID can drift.
@@ -56,7 +56,7 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - Estimated risk/effort:
 - Medium risk, medium patch.
 
-## P1: In-Memory Trace Storage Is Unbounded
+## P1: In-Memory Trace Storage Is Unbounded **COMPLETED**
 
 - Why it matters:
 - For long-lived processes, trace arrays can grow indefinitely and increase memory pressure.
@@ -69,7 +69,7 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - Estimated risk/effort:
 - Low-to-medium risk, medium patch.
 
-## P2: Artifact Retention Exists but Is Not Scheduled/Invoked
+## P2: Artifact Retention Exists but Is Not Scheduled/Invoked **COMPLETED**
 
 - Why it matters:
 - Artifacts can grow unbounded in disk usage during heavy automation.
@@ -77,8 +77,9 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - Retention method exists at `src/store/artifacts.ts:122`.
 - No invocation from startup/shutdown/tool paths was found.
 - Incremental change:
-- Call `artifacts.enforceRetention()` at startup and optionally after screenshot/DOM-save actions.
-- Make retention threshold configurable through skill config if needed.
+- Call `artifacts.enforceRetention()` during skill startup and shutdown.
+- Invoke retention after successful screenshot actions.
+- Add `artifactsMaxSessions` to `SkillConfig` / plugin config for threshold control.
 - Estimated risk/effort:
 - Low risk, small patch.
 

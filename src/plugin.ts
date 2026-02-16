@@ -10,6 +10,8 @@ function resolveConfig(raw: Record<string, unknown> | undefined): SkillConfig {
 	if (typeof raw["headless"] === "boolean") cfg.headless = raw["headless"];
 	if (typeof raw["dbPath"] === "string") cfg.dbPath = raw["dbPath"];
 	if (typeof raw["artifactsDir"] === "string") cfg.artifactsDir = raw["artifactsDir"];
+	if (typeof raw["artifactsMaxSessions"] === "number")
+		cfg.artifactsMaxSessions = raw["artifactsMaxSessions"];
 	if (typeof raw["logLevel"] === "string") cfg.logLevel = raw["logLevel"];
 	return cfg;
 }

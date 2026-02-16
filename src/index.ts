@@ -21,6 +21,7 @@ export interface SkillConfig {
 	headless?: boolean;
 	dbPath?: string;
 	artifactsDir?: string;
+	artifactsMaxSessions?: number;
 	logLevel?: string;
 	traceMaxEntriesPerSession?: number;
 	traceMaxDurationSamples?: number;
@@ -48,11 +49,22 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 	const store = new Store(storeOpts);
 	const sessions = new SessionStore(store.db);
 	const actionLog = new ActionLog(store.db);
-	const artifactOpts: { logger: typeof logger; baseDir?: string } = { logger };
+	const artifactOpts: {
+		logger: typeof logger;
+		baseDir?: string;
+		maxSessions?: number;
+	} = { logger };
 	if (config.artifactsDir) {
 		artifactOpts.baseDir = config.artifactsDir;
 	}
+	if (config.artifactsMaxSessions !== undefined) {
+		artifactOpts.maxSessions = config.artifactsMaxSessions;
+	}
 	const artifacts = new ArtifactManager(artifactOpts);
+	const startupArtifactsRemoved = artifacts.enforceRetention();
+	if (startupArtifactsRemoved > 0) {
+		logger.info({ removed: startupArtifactsRemoved }, "artifact retention enforced during startup");
+	}
 	const traceOpts: {
 		maxEntriesPerSession?: number;
 		maxDurationSamples?: number;
@@ -92,6 +104,15 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 
 	const shutdown = async (): Promise<void> => {
 		logger.info("shutting down browser automation skill");
+		try {
+			const removed = artifacts.enforceRetention();
+			if (removed > 0) {
+				logger.info({ removed }, "artifact retention enforced during shutdown");
+			}
+		} catch (err) {
+			logger.warn({ err }, "failed to enforce artifact retention during shutdown");
+		}
+
 		const activeSessions = pool.listSessions();
 		for (const session of activeSessions) {
 			try {

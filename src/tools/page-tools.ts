@@ -42,6 +42,15 @@ export function createPageTools(ctx: SkillContext): ToolDefinition[] {
 				if (!result.ok) {
 					throw new Error(result.error ?? "screenshot failed");
 				}
+
+				try {
+					const removed = ctx.artifacts.enforceRetention();
+					if (removed > 0) {
+						ctx.logger.debug({ removed }, "artifact retention enforced after screenshot");
+					}
+				} catch (err) {
+					ctx.logger.warn({ err }, "failed to enforce artifact retention after screenshot");
+				}
 				return jsonResult({ path: result.data });
 			},
 		},
