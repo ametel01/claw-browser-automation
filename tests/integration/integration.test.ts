@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ActionContext } from "../../src/actions/action.js";
+import { type ActionContext, executeAction } from "../../src/actions/action.js";
 import { getAll, getText } from "../../src/actions/extract.js";
 import { check, click, fill } from "../../src/actions/interact.js";
 import { PopupDismisser } from "../../src/actions/resilience.js";
@@ -522,6 +522,42 @@ describe("Action retry on flaky element", () => {
 		// Verify the click had its effect
 		const output = await getText(ctx, "#result", { retries: 0 });
 		expect(output.data).toBe("button-clicked");
+	});
+
+	it("should report zero retries when retries are aborted by navigation guard", async () => {
+		pool = createTestPool();
+		session = await pool.acquire();
+		await session.page.setContent("<p>Navigation guard</p>");
+
+		const ctx: ActionContext = {
+			page: session.page,
+			logger: {
+				child: () => ctx.logger,
+				info: () => {},
+				warn: () => {},
+				error: () => {},
+				debug: () => {},
+				trace: () => {},
+				fatal: () => {},
+			} as unknown as ActionContext["logger"],
+		};
+
+		let attempts = 0;
+		const result = await executeAction(
+			ctx,
+			"navigation-guard",
+			{ retries: 1, timeout: "short" },
+			async (_ctx) => {
+				attempts += 1;
+				await _ctx.page.goto("data:text/html,<p>new page</p>");
+				throw new Error("first attempt failed after navigation");
+			},
+		);
+
+		expect(result.ok).toBe(false);
+		expect(result.structuredError?.code).toBe("NAVIGATION_INTERRUPTED");
+		expect(result.retries).toBe(0);
+		expect(attempts).toBe(1);
 	});
 });
 
