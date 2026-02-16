@@ -208,7 +208,7 @@ Highest risk item — entirely opt-in, doesn't break existing tools.
 
 ---
 
-## Phase 5: Semantic Actions (#4)
+## Phase 5: Semantic Actions (#4) **COMPLETE**
 
 Builds on all prior phases (assertions, input modes, selector strategies).
 

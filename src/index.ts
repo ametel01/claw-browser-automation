@@ -10,6 +10,7 @@ import { createApprovalTools } from "./tools/approval-tools.js";
 import type { SkillContext } from "./tools/context.js";
 import { createHandleTools } from "./tools/handle-tools.js";
 import { createPageTools } from "./tools/page-tools.js";
+import { createSemanticTools } from "./tools/semantic-tools.js";
 import type { ToolDefinition } from "./tools/session-tools.js";
 import { createSessionTools } from "./tools/session-tools.js";
 
@@ -74,6 +75,7 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 		...createPageTools(ctx),
 		...createApprovalTools(ctx),
 		...createHandleTools(ctx),
+		...createSemanticTools(ctx),
 	];
 
 	const shutdown = async (): Promise<void> => {
@@ -125,6 +127,15 @@ export {
 export type { ExtractionResult, ItemProvenance } from "./actions/extract-structured.js";
 export { extractStructured } from "./actions/extract-structured.js";
 export type { InputMode } from "./actions/interact.js";
+export type {
+	ApplyFilterOptions,
+	ApplyFilterResult,
+	SetFieldOptions,
+	SetFieldResult,
+	SubmitFormOptions,
+	SubmitFormResult,
+} from "./actions/semantic.js";
+export { applyFilter, setField, submitForm } from "./actions/semantic.js";
 export {
 	AssertionFailedError,
 	BrowserAutomationError,

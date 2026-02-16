@@ -13,6 +13,7 @@ import type { SkillContext } from "../../src/tools/context.js";
 import { getSession, makeActionContext, resolveLocatorParam } from "../../src/tools/context.js";
 import { createHandleTools } from "../../src/tools/handle-tools.js";
 import { createPageTools } from "../../src/tools/page-tools.js";
+import { createSemanticTools } from "../../src/tools/semantic-tools.js";
 import type { ToolDefinition } from "../../src/tools/session-tools.js";
 import { createSessionTools } from "../../src/tools/session-tools.js";
 
@@ -370,6 +371,28 @@ describe("Tool definitions", () => {
 		});
 	});
 
+	describe("createSemanticTools", () => {
+		let tools: ToolDefinition[];
+
+		beforeEach(() => {
+			tools = createSemanticTools(ctx);
+		});
+
+		it("should create expected semantic tools", () => {
+			const names = tools.map((t) => t.name);
+			expect(names).toContain("browser_set_field");
+			expect(names).toContain("browser_submit_form");
+			expect(names).toContain("browser_apply_filter");
+			expect(tools).toHaveLength(3);
+		});
+
+		it("browser_apply_filter should expose mode parameter", () => {
+			const applyTool = findTool(tools, "browser_apply_filter");
+			const params = applyTool.parameters as { properties?: Record<string, unknown> };
+			expect(params.properties?.["mode"]).toBeDefined();
+		});
+	});
+
 	describe("all tools combined", () => {
 		it("should have globally unique names across all tool groups", () => {
 			const sessionTools = createSessionTools(ctx);
@@ -377,29 +400,33 @@ describe("Tool definitions", () => {
 			const pageTools = createPageTools(ctx);
 			const approvalTools = createApprovalTools(ctx);
 			const handleTools = createHandleTools(ctx);
+			const semanticTools = createSemanticTools(ctx);
 			const allNames = [
 				...sessionTools,
 				...actionTools,
 				...pageTools,
 				...approvalTools,
 				...handleTools,
+				...semanticTools,
 			].map((t) => t.name);
 			expect(new Set(allNames).size).toBe(allNames.length);
 		});
 
-		it("should total 23 tools", () => {
+		it("should total 26 tools", () => {
 			const sessionTools = createSessionTools(ctx);
 			const actionTools = createActionTools(ctx);
 			const pageTools = createPageTools(ctx);
 			const approvalTools = createApprovalTools(ctx);
 			const handleTools = createHandleTools(ctx);
+			const semanticTools = createSemanticTools(ctx);
 			const total =
 				sessionTools.length +
 				actionTools.length +
 				pageTools.length +
 				approvalTools.length +
-				handleTools.length;
-			expect(total).toBe(23);
+				handleTools.length +
+				semanticTools.length;
+			expect(total).toBe(26);
 		});
 
 		it("all tool names should start with browser_", () => {
@@ -408,12 +435,14 @@ describe("Tool definitions", () => {
 			const pageTools = createPageTools(ctx);
 			const approvalTools = createApprovalTools(ctx);
 			const handleTools = createHandleTools(ctx);
+			const semanticTools = createSemanticTools(ctx);
 			const allTools = [
 				...sessionTools,
 				...actionTools,
 				...pageTools,
 				...approvalTools,
 				...handleTools,
+				...semanticTools,
 			];
 			for (const tool of allTools) {
 				expect(tool.name).toMatch(/^browser_/);
