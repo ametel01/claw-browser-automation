@@ -108,8 +108,8 @@ async function runAttempt<T>(
 }
 
 type RetryLoopResult<T> =
-	| { tag: "success"; data: T; attempt: number }
-	| { tag: "exhausted"; lastError: string; lastCaughtError: unknown };
+	| { tag: "success"; data: T; attempts: number }
+	| { tag: "exhausted"; lastError: string; lastCaughtError: unknown; attempts: number };
 
 async function retryLoop<T>(
 	ctx: ActionContext,
@@ -123,20 +123,23 @@ async function retryLoop<T>(
 ): Promise<RetryLoopResult<T>> {
 	let lastError = "";
 	let lastCaughtError: unknown;
+	let attempts = 0;
 
 	for (let attempt = 0; attempt <= maxRetries; attempt++) {
 		lastCaughtError = undefined;
 
 		const navCheck = checkNavigationGuard(attempt, ctx, startUrl);
 		if (navCheck) {
-			return { tag: "exhausted", lastError: navCheck.message, lastCaughtError: navCheck };
+			return { tag: "exhausted", lastError: navCheck.message, lastCaughtError: navCheck, attempts };
 		}
+
+		attempts += 1;
 
 		try {
 			await popupDismisser.dismissOnce();
 			const outcome = await runAttempt(ctx, opts, fn, timeoutMs);
 			if (outcome.tag === "success") {
-				return { tag: "success", data: outcome.data, attempt };
+				return { tag: "success", data: outcome.data, attempts };
 			}
 			lastError = outcome.error;
 			ctx.logger.warn({ action: name, attempt }, lastError);
@@ -152,7 +155,7 @@ async function retryLoop<T>(
 		}
 	}
 
-	return { tag: "exhausted", lastError, lastCaughtError };
+	return { tag: "exhausted", lastError, lastCaughtError, attempts };
 }
 
 function checkNavigationGuard(
@@ -224,13 +227,14 @@ export async function executeAction<T>(
 
 		if (loopResult.tag === "success") {
 			const durationMs = Math.round(performance.now() - startedAt);
+			const retries = Math.max(0, loopResult.attempts - 1);
 			recordTraceEntry(ctx, name, {
 				timestamp: Date.now(),
 				durationMs,
 				ok: true,
-				retries: loopResult.attempt,
+				retries,
 			});
-			return { ok: true, data: loopResult.data, retries: loopResult.attempt, durationMs };
+			return { ok: true, data: loopResult.data, retries, durationMs };
 		}
 
 		return buildFailureResult(
@@ -238,7 +242,7 @@ export async function executeAction<T>(
 			name,
 			loopResult.lastError,
 			loopResult.lastCaughtError,
-			maxRetries,
+			loopResult.attempts,
 			startedAt,
 			opts,
 		);
@@ -252,7 +256,7 @@ async function buildFailureResult<T>(
 	name: string,
 	lastError: string,
 	lastCaughtError: unknown,
-	maxRetries: number,
+	attempts: number,
 	startedAt: number,
 	opts: ActionOptions,
 ): Promise<ActionResult<T>> {
@@ -260,7 +264,7 @@ async function buildFailureResult<T>(
 	const result: ActionResult<T> = {
 		ok: false,
 		error: lastError,
-		retries: maxRetries,
+		retries: Math.max(0, attempts - 1),
 		durationMs: Math.round(performance.now() - startedAt),
 	};
 	if (typeof structured === "object") {
@@ -278,7 +282,7 @@ async function buildFailureResult<T>(
 		}
 	}
 
-	ctx.logger.error({ action: name, error: lastError, retries: maxRetries }, "action failed");
+	ctx.logger.error({ action: name, error: lastError, retries: result.retries }, "action failed");
 	recordTraceEntry(ctx, name, {
 		timestamp: Date.now(),
 		durationMs: result.durationMs,
