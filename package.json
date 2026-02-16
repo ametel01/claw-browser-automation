@@ -24,6 +24,7 @@
 		"format": "biome format --write .",
 		"lint": "biome lint .",
 		"typecheck": "tsc --noEmit",
+		"verify": "npm run lint && npm run typecheck && npm run format && npm run check && npm run test",
 		"build": "tsc",
 		"test": "vitest run",
 		"test:watch": "vitest"
