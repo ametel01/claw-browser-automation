@@ -31,7 +31,7 @@ export interface BrowserAutomationSkill {
 }
 
 export async function createSkill(config: SkillConfig = {}): Promise<BrowserAutomationSkill> {
-	const logger = createLogger("browser-automation");
+	const logger = createLogger("browser-automation", config.logLevel);
 
 	const pool = new BrowserPool({
 		maxContexts: config.maxContexts ?? 4,

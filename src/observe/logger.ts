@@ -3,6 +3,20 @@ import * as os from "node:os";
 import * as path from "node:path";
 import pino from "pino";
 
+const ALLOWED_LOG_LEVELS = new Set(["fatal", "error", "warn", "info", "debug", "trace", "silent"]);
+
+function resolveLogLevel(level?: string): string {
+	if (!level) {
+		return process.env["LOG_LEVEL"] ?? "info";
+	}
+
+	const normalized = level.toLowerCase();
+	if (ALLOWED_LOG_LEVELS.has(normalized)) {
+		return normalized;
+	}
+	return "info";
+}
+
 function resolveWritableLogDir(): string {
 	const configured = process.env["BROWSER_LOG_DIR"];
 	const candidates = configured
@@ -35,10 +49,10 @@ function resolveLogFile(name: string): string {
 	return path.join(logDir, `${name}-${day}.log`);
 }
 
-export function createLogger(name: string) {
+export function createLogger(name: string, level?: string) {
 	const baseOptions = {
 		name,
-		level: process.env["LOG_LEVEL"] ?? "info",
+		level: resolveLogLevel(level),
 		timestamp: pino.stdTimeFunctions.isoTime,
 	};
 

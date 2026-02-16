@@ -8,7 +8,8 @@
 			"maxContexts": { "type": "number" },
 			"headless": { "type": "boolean" },
 			"dbPath": { "type": "string" },
-			"artifactsDir": { "type": "string" }
+			"artifactsDir": { "type": "string" },
+			"logLevel": { "type": "string" }
 		},
 		"additionalProperties": false
 	}
