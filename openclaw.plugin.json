@@ -1,5 +1,5 @@
 {
-	"id": "browser-automation",
+	"id": "claw-browser-automation",
 	"name": "Browser Automation",
 	"description": "Reliable browser automation layer for OpenClaw using Playwright",
 	"configSchema": {

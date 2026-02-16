@@ -30,7 +30,7 @@ function adaptTool(tool: ToolDefinition): AnyAgentTool {
 }
 
 const plugin = {
-	id: "browser-automation",
+	id: "claw-browser-automation",
 	name: "Browser Automation",
 	description: "Reliable browser automation layer for OpenClaw using Playwright",
 
@@ -39,7 +39,7 @@ const plugin = {
 		let skill: BrowserAutomationSkill | undefined;
 
 		const service: OpenClawPluginService = {
-			id: "browser-automation",
+			id: "claw-browser-automation",
 			async start() {
 				skill = await createSkill(config);
 				api.logger.info(`browser-automation started (${skill.tools.length} tools)`);

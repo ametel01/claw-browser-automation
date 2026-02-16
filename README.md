@@ -52,9 +52,9 @@ All configuration has sensible defaults. To customize, edit `~/.openclaw/opencla
 
 ```jsonc
 {
-  "skills": {
+  "plugins": {
     "entries": {
-      "browser-automation": {
+      "claw-browser-automation": {
         "enabled": true,
         "config": {
           "maxContexts": 4,
