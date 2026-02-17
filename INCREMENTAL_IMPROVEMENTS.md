@@ -98,7 +98,7 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - Estimated risk/effort:
 - Low-to-medium risk, small patch.
 
-## P2: Sensitive Input Logging Should Be Configurable/Redacted (COMPLETED)
+## P2: Sensitive Input Logging Should Be Configurable/Redacted **COMPLETED**
 
 - Why it matters:
 - Action logs currently persist raw scripts and typed values, which can include credentials or PII.

@@ -26,7 +26,7 @@ const DEFAULT_SENSITIVE_KEYS = new Set([
 	"pin",
 ]);
 
-const TYPED_TEXT_KEYS = new Set(["text", "value", "fields"]);
+const TYPED_TEXT_KEYS = new Set(["text", "value", "fields", "script"]);
 
 export interface ActionLogEntry {
 	id: number;
@@ -93,7 +93,9 @@ export class ActionLog {
 		this._db = db;
 		this._redactSensitiveInput = options.redactSensitiveInput ?? true;
 		this._redactTypedText = options.redactTypedText ?? false;
-		const keys = options.sensitiveInputKeys ?? [...DEFAULT_SENSITIVE_KEYS];
+		const keys = options.sensitiveInputKeys
+			? [...DEFAULT_SENSITIVE_KEYS, ...options.sensitiveInputKeys]
+			: [...DEFAULT_SENSITIVE_KEYS];
 		this._sensitiveInputKeys = new Set(keys.map((key) => key.toLowerCase()));
 	}
 

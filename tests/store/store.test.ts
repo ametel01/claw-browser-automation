@@ -253,6 +253,24 @@ describe("ActionLog", () => {
 		expect(input.note).toBe("keep-me");
 	});
 
+	it("should retain default sensitive key redaction when custom keys are provided", () => {
+		const customKeyLog = new ActionLog(store.db, {
+			sensitiveInputKeys: ["apiToken"],
+		});
+		customKeyLog.log({
+			sessionId: "test-session",
+			action: "fill_form",
+			input: { apiToken: "redact-me", password: "hunter2", note: "keep-me" },
+			result: makeResult(true),
+		});
+
+		const entries = customKeyLog.getBySession("test-session");
+		const input = JSON.parse(entries[0]?.input ?? "{}") as Record<string, string>;
+		expect(input.apiToken).toBe("[REDACTED]");
+		expect(input.password).toBe("[REDACTED]");
+		expect(input.note).toBe("keep-me");
+	});
+
 	it("should redact typed text in field maps when enabled", () => {
 		const redactTypedLog = new ActionLog(store.db, {
 			redactTypedText: true,
@@ -268,6 +286,22 @@ describe("ActionLog", () => {
 		const input = JSON.parse(entries[0]?.input ?? "{}") as { fields?: Record<string, string> };
 		expect(input.fields?.user).toBe("[REDACTED]");
 		expect(input.fields?.password).toBe("[REDACTED]");
+	});
+
+	it("should redact evaluate scripts when typed text redaction is enabled", () => {
+		const redactTypedLog = new ActionLog(store.db, {
+			redactTypedText: true,
+		});
+		redactTypedLog.log({
+			sessionId: "test-session",
+			action: "evaluate",
+			input: { script: "window.secret = 'abc123'" },
+			result: makeResult(true),
+		});
+
+		const entries = redactTypedLog.getBySession("test-session");
+		const input = JSON.parse(entries[0]?.input ?? "{}") as Record<string, string>;
+		expect(input.script).toBe("[REDACTED]");
 	});
 
 	it("should allow opt-out from sensitive input redaction", () => {
