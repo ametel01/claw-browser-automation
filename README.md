@@ -210,6 +210,17 @@ Each `sitePlugins` entry accepts:
 - `enabled` (optional): set `false` to disable a configured plugin
 - `options` (optional): plugin-specific JSON options passed to plugin factory exports
 
+`sitePlugins[].module` supports:
+- npm package names from your project dependencies (example: `@yourorg/claw-plugin-twitter`)
+- relative paths from the OpenClaw process working directory (example: `./plugins-examples/twitter-plugin/dist/index.js`)
+- absolute paths and `file://` URLs
+
+Plugin modules can export any of these shapes:
+- default plugin object (`{ meta, createTools }`)
+- default factory function (`(options, logger) => plugin`)
+- named `createSitePlugin` factory
+- CommonJS-compatible `default.createSitePlugin` factory
+
 ### Plugin examples
 
 This repository includes two example external plugins:

@@ -1,3 +1,6 @@
+import { createRequire } from "node:module";
+import { isAbsolute, resolve as resolvePath } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Logger } from "../observe/logger.js";
 import type { SkillContext } from "../tools/context.js";
 import type { ToolDefinition } from "../tools/session-tools.js";
@@ -11,6 +14,27 @@ import type {
 interface SitePluginModuleShape {
 	default?: unknown;
 	createSitePlugin?: unknown;
+}
+
+function isModuleResolutionError(error: unknown): boolean {
+	if (typeof error !== "object" || error === null) {
+		return false;
+	}
+	const code = "code" in error ? error.code : undefined;
+	return (
+		code === "ERR_MODULE_NOT_FOUND" ||
+		code === "MODULE_NOT_FOUND" ||
+		code === "ERR_UNSUPPORTED_DIR_IMPORT" ||
+		code === "ERR_INVALID_MODULE_SPECIFIER"
+	);
+}
+
+function isRelativePath(specifier: string): boolean {
+	return specifier.startsWith("./") || specifier.startsWith("../");
+}
+
+function isFileUrl(specifier: string): boolean {
+	return specifier.startsWith("file://");
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -49,13 +73,59 @@ function namespaceTools(plugin: SitePlugin, tools: ToolDefinition[]): ToolDefini
 	}));
 }
 
+async function importPluginModule(
+	moduleName: string,
+): Promise<{ imported: SitePluginModuleShape; resolvedFrom: string }> {
+	try {
+		const imported = (await import(moduleName)) as SitePluginModuleShape;
+		return { imported, resolvedFrom: moduleName };
+	} catch (error) {
+		if (!isModuleResolutionError(error)) {
+			throw error;
+		}
+	}
+
+	if (isRelativePath(moduleName)) {
+		const absPath = resolvePath(process.cwd(), moduleName);
+		const resolved = pathToFileURL(absPath).href;
+		const imported = (await import(resolved)) as SitePluginModuleShape;
+		return { imported, resolvedFrom: resolved };
+	}
+
+	if (isAbsolute(moduleName)) {
+		const resolved = pathToFileURL(moduleName).href;
+		const imported = (await import(resolved)) as SitePluginModuleShape;
+		return { imported, resolvedFrom: resolved };
+	}
+
+	if (isFileUrl(moduleName)) {
+		const imported = (await import(moduleName)) as SitePluginModuleShape;
+		return { imported, resolvedFrom: moduleName };
+	}
+
+	const requireFromCwd = createRequire(pathToFileURL(resolvePath(process.cwd(), "package.json")));
+	const resolved = requireFromCwd.resolve(moduleName);
+	const imported = (await import(pathToFileURL(resolved).href)) as SitePluginModuleShape;
+	return { imported, resolvedFrom: resolved };
+}
+
+function resolvePluginCandidate(imported: SitePluginModuleShape): unknown {
+	if (imported.createSitePlugin !== undefined) {
+		return imported.createSitePlugin;
+	}
+	if (isPlainObject(imported.default) && imported.default["createSitePlugin"] !== undefined) {
+		return imported.default["createSitePlugin"];
+	}
+	return imported.default;
+}
+
 async function resolvePluginFromModule(
 	moduleName: string,
 	options: Record<string, unknown> | undefined,
 	logger: Logger,
 ): Promise<SitePlugin> {
-	const imported = (await import(moduleName)) as SitePluginModuleShape;
-	const candidate = imported.default ?? imported.createSitePlugin;
+	const { imported, resolvedFrom } = await importPluginModule(moduleName);
+	const candidate = resolvePluginCandidate(imported);
 
 	if (isSitePlugin(candidate)) {
 		return candidate;
@@ -66,11 +136,13 @@ async function resolvePluginFromModule(
 		if (isSitePlugin(plugin)) {
 			return plugin;
 		}
-		throw new Error(`site plugin factory did not return a valid plugin: ${moduleName}`);
+		throw new Error(
+			`site plugin factory did not return a valid plugin: ${moduleName} (resolved from ${resolvedFrom})`,
+		);
 	}
 
 	throw new Error(
-		`site plugin module must export default SitePlugin or createSitePlugin(options): ${moduleName}`,
+		`site plugin module must export default SitePlugin or createSitePlugin(options): ${moduleName} (resolved from ${resolvedFrom})`,
 	);
 }
 
