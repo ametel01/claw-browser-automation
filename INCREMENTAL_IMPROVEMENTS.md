@@ -121,17 +121,18 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - Estimated risk/effort:
 - Completed with low-medium risk.
 
-## P3: Approval Tool Is Environment-Flag Only
+## P3: Approval Tool Is Environment-Flag Only (COMPLETED)
 
 - Why it matters:
 - For production workflows, approval should ideally integrate with the host approval channel instead of only relying on env toggles.
 - Evidence:
 - Approval decision is computed via `process.env["BROWSER_AUTO_APPROVE"]` in `src/tools/approval-tools.ts:26`.
 - Incremental change:
-- Add an injectable approval callback/provider in skill config.
-- Keep env fallback for local/dev usage.
+- Added injectable `approvalProvider` callback in `SkillConfig` and threaded through `SkillContext`.
+- Approval tool now uses provider when present and falls back to `BROWSER_AUTO_APPROVE` when absent.
+- Added tests for provider-injection behavior and preserved env-based fallback path.
 - Estimated risk/effort:
-- Medium risk, medium patch.
+- Completed with medium risk.
 
 ## Suggested Execution Order
 

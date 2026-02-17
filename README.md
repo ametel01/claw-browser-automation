@@ -107,6 +107,10 @@ import { createSkill } from "claw-browser-automation";
 const skill = await createSkill({
   maxContexts: 4,
   headless: true,
+  approvalProvider: async ({ sessionId, message }) => {
+    // Implement host-mediated approval here.
+    return true;
+  },
 });
 
 // skill.tools — array of 19 ToolDefinition objects

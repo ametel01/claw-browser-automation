@@ -291,6 +291,28 @@ describe("Tool definitions", () => {
 			});
 			expect(result.details).toHaveProperty("approved");
 		});
+
+		it("should defer to injected approval provider when present", async () => {
+			const approvalProvider = vi.fn(
+				async ({ sessionId }: { sessionId: string }) => sessionId === "sess-2",
+			);
+			const tools = createApprovalTools({
+				...ctx,
+				approvalProvider,
+			});
+			const approvalTool = tools[0];
+			if (!approvalTool) throw new Error("expected approval tool");
+
+			const result = await approvalTool.execute({
+				sessionId: "sess-2",
+				message: "Confirm checkout?",
+			});
+			expect(approvalProvider).toHaveBeenCalledWith({
+				sessionId: "sess-2",
+				message: "Confirm checkout?",
+			});
+			expect(result.details).toHaveProperty("approved", true);
+		});
 	});
 
 	describe("getSession helper", () => {

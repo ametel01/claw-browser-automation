@@ -9,6 +9,13 @@ import type { ArtifactManager } from "../store/artifacts.js";
 import type { Store } from "../store/db.js";
 import type { SessionStore } from "../store/sessions.js";
 
+export interface ApprovalRequest {
+	sessionId: string;
+	message: string;
+}
+
+export type ApprovalProvider = (request: ApprovalRequest) => boolean | Promise<boolean>;
+
 export interface SkillContext {
 	pool: BrowserPool;
 	store: Store;
@@ -17,6 +24,7 @@ export interface SkillContext {
 	artifacts: ArtifactManager;
 	trace: ActionTrace;
 	logger: Logger;
+	approvalProvider?: ApprovalProvider;
 }
 
 export function getSession(ctx: SkillContext, sessionId: string): BrowserSession {

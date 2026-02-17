@@ -7,7 +7,7 @@ import { Store } from "./store/db.js";
 import { SessionStore } from "./store/sessions.js";
 import { createActionTools } from "./tools/action-tools.js";
 import { createApprovalTools } from "./tools/approval-tools.js";
-import type { SkillContext } from "./tools/context.js";
+import type { ApprovalProvider, SkillContext } from "./tools/context.js";
 import { createHandleTools } from "./tools/handle-tools.js";
 import { createPageTools } from "./tools/page-tools.js";
 import { createSemanticTools } from "./tools/semantic-tools.js";
@@ -25,6 +25,7 @@ export interface SkillConfig {
 	redactSensitiveActionInput?: boolean;
 	sensitiveActionInputKeys?: string[];
 	redactTypedActionText?: boolean;
+	approvalProvider?: ApprovalProvider;
 	logLevel?: string;
 	traceMaxEntriesPerSession?: number;
 	traceMaxDurationSamples?: number;
@@ -119,6 +120,9 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 		trace,
 		logger,
 	};
+	if (config.approvalProvider !== undefined) {
+		ctx.approvalProvider = config.approvalProvider;
+	}
 
 	const tools = [
 		...createSessionTools(ctx),
@@ -211,6 +215,6 @@ export type { SelectorResolution, SelectorStrategy } from "./selectors/strategy.
 export type { ElementHandle, HandleResolution } from "./session/handle-registry.js";
 export { HandleRegistry } from "./session/handle-registry.js";
 export type { CookieData, SessionSnapshot } from "./session/snapshot.js";
-export type { SkillContext } from "./tools/context.js";
+export type { ApprovalProvider, ApprovalRequest, SkillContext } from "./tools/context.js";
 // Re-export key types for consumers
 export type { ToolDefinition, ToolResult } from "./tools/session-tools.js";
