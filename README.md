@@ -273,6 +273,18 @@ Artifact retention is enforced automatically at startup, shutdown, and after scr
 
 The agent can suspend a session, shut down, restart hours later, and resume exactly where it left off — same URL, same cookies, same localStorage.
 
+## Release process
+
+This repository uses tag-driven release automation.
+
+1. Ensure `package.json` version is updated (example: `0.4.0`).
+2. Push commits to `main` and wait for `CI` to pass.
+3. Create and push a version tag: `git tag v0.4.0 && git push origin v0.4.0`.
+4. `Release` workflow runs verify/build, validates tag-to-package version match, publishes to npm, and creates a GitHub release.
+
+Repository secrets required:
+- `NPM_TOKEN` (npm publish token with package publish permission)
+
 ## Development
 
 ### Scripts
