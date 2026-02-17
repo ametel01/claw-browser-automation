@@ -324,7 +324,7 @@ function recordTraceEntry(
 
 async function backoff(attempt: number): Promise<void> {
 	const base = Math.min(100 * 2 ** attempt, 2000);
-	const jitter = Math.floor(Math.random() * 500);
+	const jitter = Math.floor(Math.random() * 100);
 	await new Promise<void>((resolve) => {
 		setTimeout(resolve, base + jitter);
 	});
