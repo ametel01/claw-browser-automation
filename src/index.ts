@@ -1,6 +1,8 @@
 import { createLogger } from "./observe/logger.js";
 import { ActionTrace } from "./observe/trace.js";
 import { BrowserPool } from "./pool/browser-pool.js";
+import { loadConfiguredSitePlugins } from "./site-plugins/loader.js";
+import type { SitePluginConfigEntry } from "./site-plugins/types.js";
 import { ActionLog } from "./store/action-log.js";
 import { ArtifactManager } from "./store/artifacts.js";
 import { Store } from "./store/db.js";
@@ -14,7 +16,7 @@ import { createSemanticTools } from "./tools/semantic-tools.js";
 import type { ToolDefinition } from "./tools/session-tools.js";
 import { createSessionTools } from "./tools/session-tools.js";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
 
 export interface SkillConfig {
 	maxContexts?: number;
@@ -27,6 +29,7 @@ export interface SkillConfig {
 	redactTypedActionText?: boolean;
 	approvalProvider?: ApprovalProvider;
 	autoApprove?: boolean;
+	sitePlugins?: SitePluginConfigEntry[];
 	logLevel?: string;
 	traceMaxEntriesPerSession?: number;
 	traceMaxDurationSamples?: number;
@@ -36,6 +39,56 @@ export interface BrowserAutomationSkill {
 	tools: ToolDefinition[];
 	context: SkillContext;
 	shutdown: () => Promise<void>;
+}
+
+async function shutdownSitePlugins(
+	logger: ReturnType<typeof createLogger>,
+	loadedSitePlugins: Awaited<ReturnType<typeof loadConfiguredSitePlugins>>,
+): Promise<void> {
+	for (const entry of loadedSitePlugins) {
+		if (!entry.plugin.dispose) {
+			continue;
+		}
+		try {
+			await entry.plugin.dispose();
+		} catch (err) {
+			logger.warn({ module: entry.module, err }, "site plugin dispose failed");
+		}
+	}
+}
+
+async function snapshotActiveSessionsBeforeShutdown(
+	pool: BrowserPool,
+	sessions: SessionStore,
+	logger: ReturnType<typeof createLogger>,
+): Promise<void> {
+	const activeSessions = pool.listSessions();
+	for (const session of activeSessions) {
+		try {
+			const snapshot = await session.snapshot();
+			if (!sessions.get(session.id)) {
+				sessions.create(session.id, session.profile);
+			}
+			sessions.saveSnapshot(session.id, snapshot);
+			sessions.updateStatus(session.id, "suspended");
+		} catch (err) {
+			logger.warn({ sessionId: session.id, err }, "failed to snapshot session during shutdown");
+		}
+	}
+}
+
+function enforceArtifactRetentionOnShutdown(
+	artifacts: ArtifactManager,
+	logger: ReturnType<typeof createLogger>,
+): void {
+	try {
+		const removed = artifacts.enforceRetention();
+		if (removed > 0) {
+			logger.info({ removed }, "artifact retention enforced during shutdown");
+		}
+	} catch (err) {
+		logger.warn({ err }, "failed to enforce artifact retention during shutdown");
+	}
 }
 
 export async function createSkill(config: SkillConfig = {}): Promise<BrowserAutomationSkill> {
@@ -128,7 +181,7 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 		ctx.autoApprove = config.autoApprove;
 	}
 
-	const tools = [
+	const coreTools = [
 		...createSessionTools(ctx),
 		...createActionTools(ctx),
 		...createPageTools(ctx),
@@ -136,33 +189,21 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 		...createHandleTools(ctx),
 		...createSemanticTools(ctx),
 	];
+	const loadedSitePlugins = await loadConfiguredSitePlugins(
+		config.sitePlugins ?? [],
+		ctx,
+		logger,
+		new Set(coreTools.map((tool) => tool.name)),
+	);
+	const tools = [...coreTools, ...loadedSitePlugins.flatMap((entry) => entry.tools)];
 
 	const shutdown = async (): Promise<void> => {
 		logger.info("shutting down browser automation skill");
-		try {
-			const removed = artifacts.enforceRetention();
-			if (removed > 0) {
-				logger.info({ removed }, "artifact retention enforced during shutdown");
-			}
-		} catch (err) {
-			logger.warn({ err }, "failed to enforce artifact retention during shutdown");
-		}
-
-		const activeSessions = pool.listSessions();
-		for (const session of activeSessions) {
-			try {
-				const snapshot = await session.snapshot();
-				if (!sessions.get(session.id)) {
-					sessions.create(session.id, session.profile);
-				}
-				sessions.saveSnapshot(session.id, snapshot);
-				sessions.updateStatus(session.id, "suspended");
-			} catch (err) {
-				logger.warn({ sessionId: session.id, err }, "failed to snapshot session during shutdown");
-			}
-		}
+		enforceArtifactRetentionOnShutdown(artifacts, logger);
+		await snapshotActiveSessionsBeforeShutdown(pool, sessions, logger);
 		sessions.suspendAll();
 		await pool.shutdown();
+		await shutdownSitePlugins(logger, loadedSitePlugins);
 		store.close();
 		trace.reset();
 		logger.info("browser automation skill shut down");
@@ -219,6 +260,13 @@ export type { SelectorResolution, SelectorStrategy } from "./selectors/strategy.
 export type { ElementHandle, HandleResolution } from "./session/handle-registry.js";
 export { HandleRegistry } from "./session/handle-registry.js";
 export type { CookieData, SessionSnapshot } from "./session/snapshot.js";
+export type {
+	LoadedSitePlugin,
+	SitePlugin,
+	SitePluginConfigEntry,
+	SitePluginFactory,
+	SitePluginMeta,
+} from "./site-plugins/types.js";
 export type { ApprovalProvider, ApprovalRequest, SkillContext } from "./tools/context.js";
 // Re-export key types for consumers
 export type { ToolDefinition, ToolResult } from "./tools/session-tools.js";

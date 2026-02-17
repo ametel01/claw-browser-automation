@@ -59,7 +59,11 @@ All configuration has sensible defaults. To customize, edit `~/.openclaw/opencla
         "config": {
           "maxContexts": 4,
           "headless": true,
-          "autoApprove": false
+          "autoApprove": false,
+          "sitePlugins": [
+            { "module": "@yourorg/claw-plugin-twitter" },
+            { "module": "@yourorg/claw-plugin-agoda", "options": { "locale": "en-US" } }
+          ]
         }
       }
     }
@@ -194,11 +198,35 @@ All configuration is optional. Defaults work out of the box.
 | `sensitiveActionInputKeys` | built-in list + custom keys | Additional action-input keys to redact (merged with defaults) |
 | `redactTypedActionText` | `false` | Redact typed/evaluated text payloads (`text`, `value`, `fields`, `script`) |
 | `autoApprove` | unset | Approval fallback when no provider exists; if unset, falls back to `BROWSER_AUTO_APPROVE=1` |
+| `sitePlugins` | `[]` | Dynamic website-specific plugin modules loaded at startup |
 | `logLevel` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
 Pass these via the `config` key in your `openclaw.json` skill entry, or programmatically via `createSkill()` (see [Quick start](#quick-start)).
 
 `approvalProvider` is available in programmatic usage only (`createSkill`). If no provider is supplied, `browser_request_approval` falls back to `BROWSER_AUTO_APPROVE=1`.
+
+Each `sitePlugins` entry accepts:
+- `module`: npm package name or import path for the plugin module
+- `enabled` (optional): set `false` to disable a configured plugin
+- `options` (optional): plugin-specific JSON options passed to plugin factory exports
+
+### Plugin examples
+
+This repository includes two example external plugins:
+
+- `plugins-examples/generic-plugin` — generic cross-site example (`example_site`)
+- `plugins-examples/twitter-plugin` — domain-specific X/Twitter-style example (`twitter_site`)
+
+You can load either using a local module path in `sitePlugins`:
+
+```json
+{
+  "sitePlugins": [
+    { "module": "./plugins-examples/generic-plugin/dist/index.js" },
+    { "module": "./plugins-examples/twitter-plugin/dist/index.js" }
+  ]
+}
+```
 
 ## Reliability features
 
@@ -245,6 +273,7 @@ bun run test:watch   # Watch mode
 bun run check        # Biome lint + format check
 bun run check:fix    # Auto-fix lint/format issues
 bun run typecheck    # TypeScript strict mode check
+bun run verify       # Verify all quality checks and tests pass
 ```
 
 ### Running integration tests

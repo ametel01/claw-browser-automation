@@ -6,6 +6,30 @@ import type { ToolDefinition } from "./tools/session-tools.js";
 function resolveConfig(raw: Record<string, unknown> | undefined): SkillConfig {
 	if (!raw) return {};
 	const cfg: SkillConfig = {};
+	const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+		typeof value === "object" && value !== null && !Array.isArray(value);
+
+	const parseSitePluginEntry = (
+		value: unknown,
+	): { module: string; enabled?: boolean; options?: Record<string, unknown> } | undefined => {
+		if (!isPlainObject(value)) {
+			return undefined;
+		}
+		if (typeof value["module"] !== "string") {
+			return undefined;
+		}
+		const parsed: { module: string; enabled?: boolean; options?: Record<string, unknown> } = {
+			module: value["module"],
+		};
+		if (typeof value["enabled"] === "boolean") {
+			parsed.enabled = value["enabled"];
+		}
+		if (isPlainObject(value["options"])) {
+			parsed.options = value["options"];
+		}
+		return parsed;
+	};
+
 	if (typeof raw["maxContexts"] === "number") cfg.maxContexts = raw["maxContexts"];
 	if (typeof raw["headless"] === "boolean") cfg.headless = raw["headless"];
 	if (typeof raw["dbPath"] === "string") cfg.dbPath = raw["dbPath"];
@@ -22,6 +46,11 @@ function resolveConfig(raw: Record<string, unknown> | undefined): SkillConfig {
 	if (typeof raw["redactTypedActionText"] === "boolean")
 		cfg.redactTypedActionText = raw["redactTypedActionText"];
 	if (typeof raw["autoApprove"] === "boolean") cfg.autoApprove = raw["autoApprove"];
+	if (Array.isArray(raw["sitePlugins"])) {
+		cfg.sitePlugins = raw["sitePlugins"]
+			.map((entry) => parseSitePluginEntry(entry))
+			.filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
+	}
 	if (typeof raw["logLevel"] === "string") cfg.logLevel = raw["logLevel"];
 	return cfg;
 }

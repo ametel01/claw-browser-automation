@@ -14,6 +14,19 @@
 			"sensitiveActionInputKeys": { "type": "array", "items": { "type": "string" } },
 			"redactTypedActionText": { "type": "boolean" },
 			"autoApprove": { "type": "boolean" },
+			"sitePlugins": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"module": { "type": "string" },
+						"enabled": { "type": "boolean" },
+						"options": { "type": "object" }
+					},
+					"required": ["module"],
+					"additionalProperties": false
+				}
+			},
 			"logLevel": { "type": "string" }
 		},
 		"additionalProperties": false
