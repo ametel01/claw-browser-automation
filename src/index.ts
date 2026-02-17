@@ -61,9 +61,16 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 		artifactOpts.maxSessions = config.artifactsMaxSessions;
 	}
 	const artifacts = new ArtifactManager(artifactOpts);
-	const startupArtifactsRemoved = artifacts.enforceRetention();
-	if (startupArtifactsRemoved > 0) {
-		logger.info({ removed: startupArtifactsRemoved }, "artifact retention enforced during startup");
+	try {
+		const startupArtifactsRemoved = artifacts.enforceRetention();
+		if (startupArtifactsRemoved > 0) {
+			logger.info(
+				{ removed: startupArtifactsRemoved },
+				"artifact retention enforced during startup",
+			);
+		}
+	} catch (err) {
+		logger.warn({ err }, "failed to enforce artifact retention during startup");
 	}
 	const traceOpts: {
 		maxEntriesPerSession?: number;

@@ -104,7 +104,7 @@ export class ArtifactManager {
 		}
 		return fs
 			.readdirSync(this._baseDir, { withFileTypes: true })
-			.filter((e) => e.isDirectory())
+			.filter((e) => e.isDirectory() && SESSION_ID_PATTERN.test(e.name))
 			.map((e) => e.name)
 			.sort();
 	}
