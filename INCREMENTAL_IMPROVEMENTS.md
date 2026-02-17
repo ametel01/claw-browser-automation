@@ -83,7 +83,7 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - Estimated risk/effort:
 - Low risk, small patch.
 
-## P2: Shutdown Path Does Not Persist Named Profile Snapshots via Pool Profile Store
+## P2: Shutdown Path Does Not Persist Named Profile Snapshots via Pool Profile Store **COMPLETED**
 
 - Why it matters:
 - `release/destroy` persist profile snapshots, but pool shutdown closes sessions directly.
@@ -93,7 +93,7 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - `shutdown` closes sessions without calling `_persistProfileSnapshot` (`src/pool/browser-pool.ts:138`).
 - Skill shutdown stores DB snapshots (`src/index.ts:81`) but that is a different persistence channel than profile snapshots.
 - Incremental change:
-- In pool shutdown, persist profile snapshots per active session before close.
+- Persist named profile snapshots per active session before shutdown closes each session.
 - Keep existing DB snapshot behavior unchanged.
 - Estimated risk/effort:
 - Low-to-medium risk, small patch.

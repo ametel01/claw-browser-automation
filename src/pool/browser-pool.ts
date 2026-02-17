@@ -140,6 +140,11 @@ export class BrowserPool {
 		this._log.info("shutting down browser pool");
 		this._health.stop();
 
+		const persistTasks = [...this._sessions.values()].map((session) =>
+			this._persistProfileSnapshot(session),
+		);
+		await Promise.allSettled(persistTasks);
+
 		const closeTasks = [...this._sessions.values()].map((session) =>
 			session.close().catch((err) => {
 				this._log.warn({ sessionId: session.id, err }, "error closing session during shutdown");

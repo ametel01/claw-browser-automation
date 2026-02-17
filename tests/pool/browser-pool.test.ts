@@ -124,6 +124,22 @@ describe("BrowserPool", () => {
 		expect(restored.currentUrl()).toContain("data:text/html,<h1>persist me</h1>");
 	});
 
+	it("should persist named profile snapshot during shutdown", async () => {
+		process.env["BROWSER_PROFILES_DIR"] = `/tmp/claw-profiles-${Date.now()}`;
+
+		pool = new BrowserPool({ launchOptions: { headless: true } });
+		await pool.acquire({
+			profile: "shutdown_profile",
+			url: "data:text/html,<h1>shutdown persist</h1>",
+		});
+		await pool.shutdown();
+
+		pool = new BrowserPool({ launchOptions: { headless: true } });
+		const restored = await pool.acquire({ profile: "shutdown_profile" });
+
+		expect(restored.currentUrl()).toContain("data:text/html,<h1>shutdown persist</h1>");
+	});
+
 	it("should recover session after health check circuit breaker", async () => {
 		pool = new BrowserPool({
 			launchOptions: { headless: true },
