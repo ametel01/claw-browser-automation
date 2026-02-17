@@ -16,7 +16,7 @@ import { createSemanticTools } from "./tools/semantic-tools.js";
 import type { ToolDefinition } from "./tools/session-tools.js";
 import { createSessionTools } from "./tools/session-tools.js";
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.4.1";
 
 export interface SkillConfig {
 	maxContexts?: number;
