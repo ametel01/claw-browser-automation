@@ -34,13 +34,25 @@ export function createApprovalTools(ctx: SkillContext): ToolDefinition[] {
 						return getEnvApproval();
 					}
 					try {
-						return await provider(approvalRequest);
+						const providerDecision = await provider(approvalRequest);
+						if (typeof providerDecision === "boolean") {
+							return providerDecision;
+						}
+						ctx.logger.warn(
+							{
+								sessionId,
+								message,
+								providerDecisionType: typeof providerDecision,
+							},
+							"approval provider returned non-boolean; falling back to env",
+						);
+						return getEnvApproval();
 					} catch (err) {
 						ctx.logger.warn(
 							{ err, sessionId, message },
-							"approval provider threw; defaulting to false",
+							"approval provider threw; falling back to env",
 						);
-						return false;
+						return getEnvApproval();
 					}
 				})();
 				ctx.logger.warn({ sessionId, message, approved }, "approval requested");
