@@ -9,6 +9,7 @@
 			"headless": { "type": "boolean" },
 			"dbPath": { "type": "string" },
 			"artifactsDir": { "type": "string" },
+			"artifactsMaxSessions": { "type": "number" },
 			"logLevel": { "type": "string" }
 		},
 		"additionalProperties": false
