@@ -13,6 +13,7 @@
 			"redactSensitiveActionInput": { "type": "boolean" },
 			"sensitiveActionInputKeys": { "type": "array", "items": { "type": "string" } },
 			"redactTypedActionText": { "type": "boolean" },
+			"autoApprove": { "type": "boolean" },
 			"logLevel": { "type": "string" }
 		},
 		"additionalProperties": false

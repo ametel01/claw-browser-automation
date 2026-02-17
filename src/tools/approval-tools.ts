@@ -6,6 +6,13 @@ function getEnvApproval(): boolean {
 	return process.env["BROWSER_AUTO_APPROVE"] === "1";
 }
 
+function resolveFallbackApproval(ctx: SkillContext): boolean {
+	if (ctx.autoApprove !== undefined) {
+		return ctx.autoApprove;
+	}
+	return getEnvApproval();
+}
+
 function jsonResult(payload: unknown): ToolResult {
 	return {
 		content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
@@ -31,7 +38,7 @@ export function createApprovalTools(ctx: SkillContext): ToolDefinition[] {
 				const approvalRequest = { sessionId, message };
 				const approved = await (async () => {
 					if (!provider) {
-						return getEnvApproval();
+						return resolveFallbackApproval(ctx);
 					}
 					try {
 						const providerDecision = await provider(approvalRequest);
@@ -46,13 +53,13 @@ export function createApprovalTools(ctx: SkillContext): ToolDefinition[] {
 							},
 							"approval provider returned non-boolean; falling back to env",
 						);
-						return getEnvApproval();
+						return resolveFallbackApproval(ctx);
 					} catch (err) {
 						ctx.logger.warn(
 							{ err, sessionId, message },
 							"approval provider threw; falling back to env",
 						);
-						return getEnvApproval();
+						return resolveFallbackApproval(ctx);
 					}
 				})();
 				ctx.logger.warn({ sessionId, message, approved }, "approval requested");

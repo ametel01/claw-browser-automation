@@ -25,6 +25,7 @@ export interface SkillContext {
 	trace: ActionTrace;
 	logger: Logger;
 	approvalProvider?: ApprovalProvider;
+	autoApprove?: boolean;
 }
 
 export function getSession(ctx: SkillContext, sessionId: string): BrowserSession {

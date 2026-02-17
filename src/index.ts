@@ -26,6 +26,7 @@ export interface SkillConfig {
 	sensitiveActionInputKeys?: string[];
 	redactTypedActionText?: boolean;
 	approvalProvider?: ApprovalProvider;
+	autoApprove?: boolean;
 	logLevel?: string;
 	traceMaxEntriesPerSession?: number;
 	traceMaxDurationSamples?: number;
@@ -122,6 +123,9 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 	};
 	if (config.approvalProvider !== undefined) {
 		ctx.approvalProvider = config.approvalProvider;
+	}
+	if (config.autoApprove !== undefined) {
+		ctx.autoApprove = config.autoApprove;
 	}
 
 	const tools = [

@@ -58,7 +58,8 @@ All configuration has sensible defaults. To customize, edit `~/.openclaw/opencla
         "enabled": true,
         "config": {
           "maxContexts": 4,
-          "headless": true
+          "headless": true,
+          "autoApprove": false
         }
       }
     }
@@ -192,6 +193,7 @@ All configuration is optional. Defaults work out of the box.
 | `redactSensitiveActionInput` | `true` | Redact known sensitive action-input keys before persisting action logs |
 | `sensitiveActionInputKeys` | built-in list + custom keys | Additional action-input keys to redact (merged with defaults) |
 | `redactTypedActionText` | `false` | Redact typed/evaluated text payloads (`text`, `value`, `fields`, `script`) |
+| `autoApprove` | unset | Approval fallback when no provider exists; if unset, falls back to `BROWSER_AUTO_APPROVE=1` |
 | `logLevel` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
 Pass these via the `config` key in your `openclaw.json` skill entry, or programmatically via `createSkill()` (see [Quick start](#quick-start)).

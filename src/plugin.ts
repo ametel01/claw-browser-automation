@@ -21,6 +21,7 @@ function resolveConfig(raw: Record<string, unknown> | undefined): SkillConfig {
 	}
 	if (typeof raw["redactTypedActionText"] === "boolean")
 		cfg.redactTypedActionText = raw["redactTypedActionText"];
+	if (typeof raw["autoApprove"] === "boolean") cfg.autoApprove = raw["autoApprove"];
 	if (typeof raw["logLevel"] === "string") cfg.logLevel = raw["logLevel"];
 	return cfg;
 }

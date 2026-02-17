@@ -314,6 +314,31 @@ describe("Tool definitions", () => {
 			}
 		});
 
+		it("should use configured autoApprove when provider is absent", async () => {
+			const previous = process.env["BROWSER_AUTO_APPROVE"];
+			process.env["BROWSER_AUTO_APPROVE"] = "0";
+			try {
+				const tools = createApprovalTools({
+					...ctx,
+					autoApprove: true,
+				});
+				const approvalTool = tools[0];
+				if (!approvalTool) throw new Error("expected approval tool");
+
+				const result = await approvalTool.execute({
+					sessionId: "sess-1",
+					message: "Confirm checkout?",
+				});
+				expect(result.details).toHaveProperty("approved", true);
+			} finally {
+				if (previous === undefined) {
+					delete process.env["BROWSER_AUTO_APPROVE"];
+				} else {
+					process.env["BROWSER_AUTO_APPROVE"] = previous;
+				}
+			}
+		});
+
 		it("should defer to injected approval provider when present", async () => {
 			const approvalProvider = vi.fn(
 				async ({ sessionId }: { sessionId: string }) => sessionId === "sess-2",
@@ -345,6 +370,35 @@ describe("Tool definitions", () => {
 				});
 				const tools = createApprovalTools({
 					...ctx,
+					approvalProvider,
+				});
+				const approvalTool = tools[0];
+				if (!approvalTool) throw new Error("expected approval tool");
+
+				const result = await approvalTool.execute({
+					sessionId: "sess-2",
+					message: "Confirm checkout?",
+				});
+				expect(result.details).toHaveProperty("approved", true);
+			} finally {
+				if (previous === undefined) {
+					delete process.env["BROWSER_AUTO_APPROVE"];
+				} else {
+					process.env["BROWSER_AUTO_APPROVE"] = previous;
+				}
+			}
+		});
+
+		it("should use configured autoApprove when provider throws", async () => {
+			const previous = process.env["BROWSER_AUTO_APPROVE"];
+			process.env["BROWSER_AUTO_APPROVE"] = "0";
+			try {
+				const approvalProvider = vi.fn(async () => {
+					throw new Error("provider unavailable");
+				});
+				const tools = createApprovalTools({
+					...ctx,
+					autoApprove: true,
 					approvalProvider,
 				});
 				const approvalTool = tools[0];
