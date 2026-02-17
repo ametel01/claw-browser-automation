@@ -10,6 +10,9 @@
 			"dbPath": { "type": "string" },
 			"artifactsDir": { "type": "string" },
 			"artifactsMaxSessions": { "type": "number" },
+			"redactSensitiveActionInput": { "type": "boolean" },
+			"sensitiveActionInputKeys": { "type": "array", "items": { "type": "string" } },
+			"redactTypedActionText": { "type": "boolean" },
 			"logLevel": { "type": "string" }
 		},
 		"additionalProperties": false

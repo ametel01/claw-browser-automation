@@ -98,7 +98,7 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - Estimated risk/effort:
 - Low-to-medium risk, small patch.
 
-## P2: Sensitive Input Logging Should Be Configurable/Redacted
+## P2: Sensitive Input Logging Should Be Configurable/Redacted (COMPLETED)
 
 - Why it matters:
 - Action logs currently persist raw scripts and typed values, which can include credentials or PII.
@@ -107,10 +107,19 @@ Reviewed the current codebase as a stable, working system and looked for low-ris
 - `browser_type` and `browser_fill_form` log raw field values (`src/tools/action-tools.ts:153`, `src/tools/action-tools.ts:212`).
 - Inputs are serialized directly into SQLite action_log (`src/store/action-log.ts:70`).
 - Incremental change:
-- Add configurable redaction policy in `ActionLog` path.
-- Default redaction for known sensitive keys and optionally for all typed text.
+- Implemented configurable `ActionLog` redaction policy and wired it into `createSkill`.
+- Added plugin schema and config resolution:
+  - `redactSensitiveActionInput` (default `true`)
+  - `sensitiveActionInputKeys` (defaults to known sensitive key set; user override supported)
+  - `redactTypedActionText` (default `false`)
+- Added targeted action-log tests for:
+  - default sensitive-key redaction
+  - configurable key list
+  - typed-text redaction (including `fields` maps)
+  - opt-out from redaction
+- `ActionLog` now recursively sanitizes structured input before persistence, with parent-key context propagation for map-like typed payloads.
 - Estimated risk/effort:
-- Low risk, medium patch.
+- Completed with low-medium risk.
 
 ## P3: Approval Tool Is Environment-Flag Only
 

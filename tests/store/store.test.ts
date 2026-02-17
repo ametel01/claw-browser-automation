@@ -202,6 +202,90 @@ describe("ActionLog", () => {
 		expect(failures[0]?.action).toBe("type");
 		expect(failures[0]?.result.error).toBe("timeout");
 	});
+
+	it("should redact known sensitive keys by default", () => {
+		actionLog.log({
+			sessionId: "test-session",
+			action: "fill_form",
+			input: { username: "alice", password: "hunter2", token: "abc123" },
+			result: makeResult(true),
+		});
+
+		const entries = actionLog.getBySession("test-session");
+		const input = JSON.parse(entries[0]?.input ?? "{}") as Record<string, string>;
+		expect(input.password).toBe("[REDACTED]");
+		expect(input.token).toBe("[REDACTED]");
+		expect(input.username).toBe("alice");
+	});
+
+	it("should redact typed text when enabled", () => {
+		const redactTypedLog = new ActionLog(store.db, {
+			redactTypedText: true,
+		});
+		redactTypedLog.log({
+			sessionId: "test-session",
+			action: "type",
+			input: { text: "secret", mode: "fill", selector: "#pwd" },
+			result: makeResult(true),
+		});
+
+		const entries = redactTypedLog.getBySession("test-session");
+		const input = JSON.parse(entries[0]?.input ?? "{}") as Record<string, string>;
+		expect(input.text).toBe("[REDACTED]");
+		expect(input.selector).toBe("#pwd");
+		expect(input.mode).toBe("fill");
+	});
+
+	it("should redact custom sensitive keys", () => {
+		const customKeyLog = new ActionLog(store.db, {
+			sensitiveInputKeys: ["apiToken"],
+		});
+		customKeyLog.log({
+			sessionId: "test-session",
+			action: "type",
+			input: { apiToken: "redact-me", note: "keep-me" },
+			result: makeResult(true),
+		});
+
+		const entries = customKeyLog.getBySession("test-session");
+		const input = JSON.parse(entries[0]?.input ?? "{}") as Record<string, string>;
+		expect(input.apiToken).toBe("[REDACTED]");
+		expect(input.note).toBe("keep-me");
+	});
+
+	it("should redact typed text in field maps when enabled", () => {
+		const redactTypedLog = new ActionLog(store.db, {
+			redactTypedText: true,
+		});
+		redactTypedLog.log({
+			sessionId: "test-session",
+			action: "fill_form",
+			input: { fields: { user: "alice", password: "hunter2" } },
+			result: makeResult(true),
+		});
+
+		const entries = redactTypedLog.getBySession("test-session");
+		const input = JSON.parse(entries[0]?.input ?? "{}") as { fields?: Record<string, string> };
+		expect(input.fields?.user).toBe("[REDACTED]");
+		expect(input.fields?.password).toBe("[REDACTED]");
+	});
+
+	it("should allow opt-out from sensitive input redaction", () => {
+		const unredactedLog = new ActionLog(store.db, {
+			redactSensitiveInput: false,
+		});
+		unredactedLog.log({
+			sessionId: "test-session",
+			action: "fill_form",
+			input: { password: "open-secrets", value: "also-sensitive" },
+			result: makeResult(true),
+		});
+
+		const entries = unredactedLog.getBySession("test-session");
+		const input = JSON.parse(entries[0]?.input ?? "{}") as Record<string, string>;
+		expect(input.password).toBe("open-secrets");
+		expect(input.value).toBe("also-sensitive");
+	});
 });
 
 describe("ArtifactManager", () => {

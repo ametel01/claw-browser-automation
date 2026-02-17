@@ -22,6 +22,9 @@ export interface SkillConfig {
 	dbPath?: string;
 	artifactsDir?: string;
 	artifactsMaxSessions?: number;
+	redactSensitiveActionInput?: boolean;
+	sensitiveActionInputKeys?: string[];
+	redactTypedActionText?: boolean;
 	logLevel?: string;
 	traceMaxEntriesPerSession?: number;
 	traceMaxDurationSamples?: number;
@@ -48,7 +51,24 @@ export async function createSkill(config: SkillConfig = {}): Promise<BrowserAuto
 	}
 	const store = new Store(storeOpts);
 	const sessions = new SessionStore(store.db);
-	const actionLog = new ActionLog(store.db);
+	const actionLogOptions = (() => {
+		const options: {
+			redactSensitiveInput?: boolean;
+			sensitiveInputKeys?: string[];
+			redactTypedText?: boolean;
+		} = {};
+		if (config.redactSensitiveActionInput !== undefined) {
+			options.redactSensitiveInput = config.redactSensitiveActionInput;
+		}
+		if (config.sensitiveActionInputKeys !== undefined) {
+			options.sensitiveInputKeys = config.sensitiveActionInputKeys;
+		}
+		if (config.redactTypedActionText !== undefined) {
+			options.redactTypedText = config.redactTypedActionText;
+		}
+		return options;
+	})();
+	const actionLog = new ActionLog(store.db, actionLogOptions);
 	const artifactOpts: {
 		logger: typeof logger;
 		baseDir?: string;

@@ -12,6 +12,15 @@ function resolveConfig(raw: Record<string, unknown> | undefined): SkillConfig {
 	if (typeof raw["artifactsDir"] === "string") cfg.artifactsDir = raw["artifactsDir"];
 	if (typeof raw["artifactsMaxSessions"] === "number")
 		cfg.artifactsMaxSessions = raw["artifactsMaxSessions"];
+	if (typeof raw["redactSensitiveActionInput"] === "boolean")
+		cfg.redactSensitiveActionInput = raw["redactSensitiveActionInput"];
+	if (Array.isArray(raw["sensitiveActionInputKeys"])) {
+		cfg.sensitiveActionInputKeys = raw["sensitiveActionInputKeys"].filter(
+			(value): value is string => typeof value === "string",
+		);
+	}
+	if (typeof raw["redactTypedActionText"] === "boolean")
+		cfg.redactTypedActionText = raw["redactTypedActionText"];
 	if (typeof raw["logLevel"] === "string") cfg.logLevel = raw["logLevel"];
 	return cfg;
 }

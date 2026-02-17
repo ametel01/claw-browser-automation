@@ -1,6 +1,33 @@
 import type Database from "better-sqlite3";
 import type { ActionResult } from "../actions/action.js";
 
+const DEFAULT_SENSITIVE_KEYS = new Set([
+	"password",
+	"passwd",
+	"pass",
+	"token",
+	"auth",
+	"authorization",
+	"secret",
+	"api_key",
+	"apikey",
+	"secret_key",
+	"private_key",
+	"access_token",
+	"refresh_token",
+	"client_secret",
+	"id_token",
+	"bearer",
+	"session_id",
+	"credit_card",
+	"card_number",
+	"cvv",
+	"ssn",
+	"pin",
+]);
+
+const TYPED_TEXT_KEYS = new Set(["text", "value", "fields"]);
+
 export interface ActionLogEntry {
 	id: number;
 	sessionId: string;
@@ -50,11 +77,89 @@ export interface LogActionParams {
 	result: ActionResult;
 }
 
+export interface ActionLogOptions {
+	redactSensitiveInput?: boolean;
+	sensitiveInputKeys?: string[];
+	redactTypedText?: boolean;
+}
+
 export class ActionLog {
 	private _db: Database.Database;
+	private _redactSensitiveInput: boolean;
+	private _redactTypedText: boolean;
+	private _sensitiveInputKeys: Set<string>;
 
-	constructor(db: Database.Database) {
+	constructor(db: Database.Database, options: ActionLogOptions = {}) {
 		this._db = db;
+		this._redactSensitiveInput = options.redactSensitiveInput ?? true;
+		this._redactTypedText = options.redactTypedText ?? false;
+		const keys = options.sensitiveInputKeys ?? [...DEFAULT_SENSITIVE_KEYS];
+		this._sensitiveInputKeys = new Set(keys.map((key) => key.toLowerCase()));
+	}
+
+	private static isPlainObject(value: unknown): value is Record<string, unknown> {
+		return (
+			typeof value === "object" &&
+			value !== null &&
+			!Array.isArray(value) &&
+			Object.getPrototypeOf(value) === Object.prototype
+		);
+	}
+
+	private isSensitiveKey(key: string): boolean {
+		return this._sensitiveInputKeys.has(key.toLowerCase());
+	}
+
+	private isTypedTextKey(key: string): boolean {
+		return TYPED_TEXT_KEYS.has(key.toLowerCase());
+	}
+
+	private sanitizeInput(
+		input: Record<string, unknown>,
+		parentTypedText = false,
+	): Record<string, unknown> {
+		const safeInput: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(input)) {
+			safeInput[key] = this.sanitizeValue(value, key, parentTypedText);
+		}
+		return safeInput;
+	}
+
+	private sanitizeValue(value: unknown, key: string, parentTypedText: boolean): unknown {
+		const typedText = parentTypedText || this.isTypedTextKey(key);
+
+		if (this._redactSensitiveInput && this.isSensitiveKey(key)) {
+			return "[REDACTED]";
+		}
+
+		if (typeof value === "string") {
+			if (this._redactTypedText && (typedText || this.isTypedTextKey(key))) {
+				return "[REDACTED]";
+			}
+			return value;
+		}
+
+		if (value === null || typeof value !== "object") {
+			return value;
+		}
+
+		if (Array.isArray(value)) {
+			return value.map((entry) => this.sanitizeValue(entry, key, typedText || parentTypedText));
+		}
+
+		if (!ActionLog.isPlainObject(value)) {
+			return value;
+		}
+
+		const childTypedText = typedText || parentTypedText;
+		return this.sanitizeInput(value, childTypedText);
+	}
+
+	private serializeInput(input?: Record<string, unknown>): string | null {
+		if (!input) {
+			return null;
+		}
+		return JSON.stringify(this.sanitizeInput(input));
 	}
 
 	log(params: LogActionParams): number {
@@ -67,7 +172,7 @@ export class ActionLog {
 				params.sessionId,
 				params.action,
 				params.selector ?? null,
-				params.input ? JSON.stringify(params.input) : null,
+				this.serializeInput(params.input),
 				JSON.stringify(params.result),
 				params.result.screenshot ?? null,
 				params.result.durationMs,
