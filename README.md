@@ -188,9 +188,15 @@ All configuration is optional. Defaults work out of the box.
 | `headless` | `true` | Run browsers without a visible window |
 | `dbPath` | `~/.openclaw/browser-automation/store.db` | SQLite database for session persistence |
 | `artifactsDir` | `~/.openclaw/workspace/browser-automation/artifacts` | Screenshot and DOM snapshot storage |
+| `artifactsMaxSessions` | `100` | Max artifact session directories retained before oldest are removed |
+| `redactSensitiveActionInput` | `true` | Redact known sensitive action-input keys before persisting action logs |
+| `sensitiveActionInputKeys` | built-in list + custom keys | Additional action-input keys to redact (merged with defaults) |
+| `redactTypedActionText` | `false` | Redact typed/evaluated text payloads (`text`, `value`, `fields`, `script`) |
 | `logLevel` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
 Pass these via the `config` key in your `openclaw.json` skill entry, or programmatically via `createSkill()` (see [Quick start](#quick-start)).
+
+`approvalProvider` is available in programmatic usage only (`createSkill`). If no provider is supplied, `browser_request_approval` falls back to `BROWSER_AUTO_APPROVE=1`.
 
 ## Reliability features
 
@@ -201,6 +207,7 @@ These are the mechanisms that make this layer production-grade compared to an ex
 - **DOM stability checks** before reads and clicks (MutationObserver-based)
 - **Automatic popup/cookie banner dismissal** — recognizes 13 common patterns
 - **Health probes with circuit breaker** — detects browser crashes, auto-restarts
+- **Session-ID preserving crash recovery** — unhealthy sessions are recreated without changing `sessionId`
 - **Session snapshots** — URL, cookies, localStorage checkpointed to SQLite
 - **Pre/postcondition verification** per action
 - **Layered selector resolution** — CSS, ARIA, text, label, test ID, XPath with fallback chains
@@ -210,6 +217,8 @@ These are the mechanisms that make this layer production-grade compared to an ex
 All session state survives process restarts:
 
 ```
+
+Artifact retention is enforced automatically at startup, shutdown, and after screenshot captures.
 ~/.openclaw/browser-automation/
 ├── store.db              # SQLite: sessions, action log, schema
 └── ...
