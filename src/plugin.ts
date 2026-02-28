@@ -76,7 +76,7 @@ const plugin = {
 	name: "Browser Automation",
 	description: "Reliable browser automation layer for OpenClaw using Playwright",
 
-	async register(api: OpenClawPluginApi): Promise<void> {
+	register(api: OpenClawPluginApi): void {
 		const config = resolveConfig(api.pluginConfig);
 		let skill: BrowserAutomationSkill | undefined;
 
