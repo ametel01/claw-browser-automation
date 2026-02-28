@@ -509,7 +509,9 @@ describe("Tool definitions", () => {
 			expect(names).toContain("browser_set_field");
 			expect(names).toContain("browser_submit_form");
 			expect(names).toContain("browser_apply_filter");
-			expect(tools).toHaveLength(3);
+			expect(names).toContain("browser_select_autocomplete");
+			expect(names).toContain("browser_set_date_field");
+			expect(tools).toHaveLength(5);
 		});
 
 		it("browser_apply_filter should expose mode parameter", () => {
@@ -538,7 +540,7 @@ describe("Tool definitions", () => {
 			expect(new Set(allNames).size).toBe(allNames.length);
 		});
 
-		it("should total 26 tools", () => {
+		it("should total 28 tools", () => {
 			const sessionTools = createSessionTools(ctx);
 			const actionTools = createActionTools(ctx);
 			const pageTools = createPageTools(ctx);
@@ -552,7 +554,7 @@ describe("Tool definitions", () => {
 				approvalTools.length +
 				handleTools.length +
 				semanticTools.length;
-			expect(total).toBe(26);
+			expect(total).toBe(28);
 		});
 
 		it("all tool names should start with browser_", () => {
