@@ -223,10 +223,11 @@ Plugin modules can export any of these shapes:
 
 ### Plugin examples
 
-This repository includes two example external plugins:
+This repository includes three example external plugins:
 
 - `plugins-examples/generic-plugin` — generic cross-site example (`example_site`)
 - `plugins-examples/twitter-plugin` — domain-specific X/Twitter-style example (`twitter_site`)
+- `plugins-examples/slack-plugin` — Slack activity-reader and in-thread reply tools (`slack_site`)
 
 You can load either using a local module path in `sitePlugins`:
 
@@ -234,7 +235,8 @@ You can load either using a local module path in `sitePlugins`:
 {
   "sitePlugins": [
     { "module": "./plugins-examples/generic-plugin/dist/index.js" },
-    { "module": "./plugins-examples/twitter-plugin/dist/index.js" }
+    { "module": "./plugins-examples/twitter-plugin/dist/index.js" },
+    { "module": "./plugins-examples/slack-plugin/dist/index.js" }
   ]
 }
 ```
