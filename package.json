@@ -1,6 +1,6 @@
 {
 	"name": "claw-browser-automation",
-	"version": "0.4.2",
+	"version": "0.4.3",
 	"description": "Reliable browser automation layer for OpenClaw",
 	"type": "module",
 	"main": "dist/index.js",

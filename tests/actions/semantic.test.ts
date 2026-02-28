@@ -2,7 +2,13 @@ import type { Browser, BrowserContext, Page } from "playwright-core";
 import { chromium } from "playwright-core";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ActionContext } from "../../src/actions/action.js";
-import { applyFilter, setField, submitForm } from "../../src/actions/semantic.js";
+import {
+	applyFilter,
+	selectAutocomplete,
+	setDateField,
+	setField,
+	submitForm,
+} from "../../src/actions/semantic.js";
 
 function mockLogger(): ActionContext["logger"] {
 	return {
@@ -261,6 +267,43 @@ describe("Semantic Actions", () => {
 			expect(result.ok).toBe(true);
 			expect(result.data?.applied).toBe(false);
 			expect(await page.inputValue("#f")).toBe("skip test");
+		});
+
+		describe("selectAutocomplete", () => {
+			it("should type query and choose matching option", async () => {
+				const ctx = await setup(`
+				<label for="to">To</label>
+				<input id="to" aria-label="To" />
+				<ul id="options" role="listbox">
+					<li role="option">Cebu CEB</li>
+					<li role="option">Clark CRK</li>
+				</ul>
+				<script>
+					document.querySelectorAll('#options [role="option"]').forEach((el) => {
+						el.addEventListener('click', () => {
+							document.getElementById('to').value = el.textContent || '';
+						});
+					});
+				</script>
+			`);
+
+				const result = await selectAutocomplete(ctx, "To", "Ceb", "Cebu CEB", { retries: 0 });
+				expect(result.ok).toBe(true);
+				expect(await page.inputValue("#to")).toBe("Cebu CEB");
+			});
+		});
+
+		describe("setDateField", () => {
+			it("should set date input and dispatch events", async () => {
+				const ctx = await setup(`
+				<label for="depart">Departing on</label>
+				<input id="depart" />
+			`);
+
+				const result = await setDateField(ctx, "Departing on", "16 Mar 2026", { retries: 0 });
+				expect(result.ok).toBe(true);
+				expect(await page.inputValue("#depart")).toBe("16 Mar 2026");
+			});
 		});
 	});
 });

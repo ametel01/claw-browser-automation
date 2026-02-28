@@ -1,5 +1,11 @@
 import { Type } from "@sinclair/typebox";
-import { applyFilter, setField, submitForm } from "../actions/semantic.js";
+import {
+	applyFilter,
+	selectAutocomplete,
+	setDateField,
+	setField,
+	submitForm,
+} from "../actions/semantic.js";
 import type { SkillContext } from "./context.js";
 import { getSession, makeActionContext } from "./context.js";
 import type { ToolDefinition, ToolResult } from "./session-tools.js";
@@ -27,6 +33,89 @@ function logAction(
 
 export function createSemanticTools(ctx: SkillContext): ToolDefinition[] {
 	return [
+		{
+			name: "browser_select_autocomplete",
+			description:
+				"Set an autocomplete field and select an option from its suggestion list. " +
+				"Useful for travel/booking destination pickers and combobox inputs.",
+			label: "Select Autocomplete Option",
+			parameters: Type.Object({
+				sessionId: Type.String({ description: "Session ID" }),
+				identifier: Type.String({
+					description: "Field label, placeholder, name, or aria-label",
+				}),
+				query: Type.String({ description: "Text to type into the autocomplete field" }),
+				optionText: Type.String({ description: "Visible option text to click from suggestions" }),
+				mode: Type.Optional(
+					Type.Union(
+						[
+							Type.Literal("fill"),
+							Type.Literal("sequential"),
+							Type.Literal("paste"),
+							Type.Literal("nativeSetter"),
+						],
+						{ description: "Input mode for typing (default: sequential)" },
+					),
+				),
+				delayMs: Type.Optional(Type.Number({ description: "Typing delay for sequential mode" })),
+				scope: Type.Optional(Type.String({ description: "CSS selector to scope field search" })),
+			}),
+			async execute(params) {
+				const sessionId = params["sessionId"] as string;
+				const identifier = params["identifier"] as string;
+				const query = params["query"] as string;
+				const optionText = params["optionText"] as string;
+				const mode = params["mode"] as "fill" | "sequential" | "paste" | "nativeSetter" | undefined;
+				const delayMs = params["delayMs"] as number | undefined;
+				const scope = params["scope"] as string | undefined;
+				const session = getSession(ctx, sessionId);
+				const actx = makeActionContext(ctx, session);
+				const opts: Parameters<typeof selectAutocomplete>[4] = {};
+				if (mode) opts.mode = mode;
+				if (delayMs !== undefined) opts.delayMs = delayMs;
+				if (scope) opts.scope = scope;
+				const result = await selectAutocomplete(actx, identifier, query, optionText, opts);
+				logAction(ctx, sessionId, "select_autocomplete", result, {
+					identifier,
+					query,
+					optionText,
+					mode,
+					delayMs,
+					scope,
+				});
+				if (!result.ok) throw new Error(result.error ?? "select autocomplete failed");
+				return jsonResult({ ok: true, ...result.data });
+			},
+		},
+		{
+			name: "browser_set_date_field",
+			description:
+				"Set a date input field by label/placeholder/name and dispatch native events " +
+				"to improve compatibility with controlled date pickers.",
+			label: "Set Date Field",
+			parameters: Type.Object({
+				sessionId: Type.String({ description: "Session ID" }),
+				identifier: Type.String({
+					description: "Date field label, placeholder, name, or aria-label",
+				}),
+				value: Type.String({ description: "Date value to set (site-local expected format)" }),
+				scope: Type.Optional(Type.String({ description: "CSS selector to scope field search" })),
+			}),
+			async execute(params) {
+				const sessionId = params["sessionId"] as string;
+				const identifier = params["identifier"] as string;
+				const value = params["value"] as string;
+				const scope = params["scope"] as string | undefined;
+				const session = getSession(ctx, sessionId);
+				const actx = makeActionContext(ctx, session);
+				const opts: Parameters<typeof setDateField>[3] = {};
+				if (scope) opts.scope = scope;
+				const result = await setDateField(actx, identifier, value, opts);
+				logAction(ctx, sessionId, "set_date_field", result, { identifier, value, scope });
+				if (!result.ok) throw new Error(result.error ?? "set date field failed");
+				return jsonResult({ ok: true, ...result.data });
+			},
+		},
 		{
 			name: "browser_set_field",
 			description:

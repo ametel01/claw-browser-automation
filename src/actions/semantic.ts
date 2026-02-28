@@ -57,6 +57,26 @@ export interface ApplyFilterResult {
 	applied: boolean;
 }
 
+export interface SelectAutocompleteOptions extends ActionOptions {
+	mode?: InputMode;
+	delayMs?: number;
+	scope?: string;
+}
+
+export interface SelectAutocompleteResult {
+	fieldStrategy: string;
+	optionText: string;
+}
+
+export interface SetDateFieldOptions extends ActionOptions {
+	scope?: string;
+}
+
+export interface SetDateFieldResult {
+	fieldStrategy: string;
+	value: string;
+}
+
 function buildFieldStrategies(identifier: string, scope?: string): SelectorStrategy[] {
 	const prefix = scope ? `${scope} ` : "";
 	return [
@@ -204,6 +224,104 @@ export async function submitForm(
 		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
 
 		return { strategy: resolution.strategy.type };
+	});
+}
+
+function escapeRegex(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Select an item from an autocomplete/combobox field.
+ */
+export async function selectAutocomplete(
+	ctx: ActionContext,
+	identifier: string,
+	query: string,
+	optionText: string,
+	opts: SelectAutocompleteOptions = {},
+): Promise<ActionResult<SelectAutocompleteResult>> {
+	const timeoutMs = resolveTimeout(opts.timeout);
+	const strategies = buildFieldStrategies(identifier, opts.scope);
+
+	return executeAction(ctx, "selectAutocomplete", opts, async (_ctx) => {
+		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
+		const resolution = await resolveFirstMatch(_ctx.page, strategies, timeoutMs);
+		const selector = resolution.strategy;
+
+		const typeOpts: Parameters<typeof typeAction>[3] = {
+			timeout: timeoutMs,
+			retries: 0,
+			mode: opts.mode ?? "sequential",
+		};
+		if (opts.delayMs !== undefined) {
+			typeOpts.delayMs = opts.delayMs;
+		}
+
+		const typed = await typeAction(_ctx, selector, query, typeOpts);
+		if (!typed.ok) {
+			throw new Error(typed.error ?? "selectAutocomplete: type failed");
+		}
+
+		const optionMatchers = [
+			_ctx.page.getByRole("option", { name: optionText }),
+			_ctx.page.getByText(new RegExp(`^\\s*${escapeRegex(optionText)}\\s*$`, "i")),
+			_ctx.page.locator('[role="listbox"] [role="option"]', { hasText: optionText }),
+			_ctx.page.locator('li, div[role="option"], button', { hasText: optionText }),
+		];
+
+		let clicked = false;
+		for (const locator of optionMatchers) {
+			const item = locator.first();
+			if ((await item.count()) > 0) {
+				await item.click({ timeout: timeoutMs });
+				clicked = true;
+				break;
+			}
+		}
+
+		if (!clicked) {
+			throw new Error(`selectAutocomplete: option not found: ${optionText}`);
+		}
+
+		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
+		return { fieldStrategy: resolution.strategy.type, optionText };
+	});
+}
+
+/**
+ * Set a date field value with event dispatch suitable for controlled inputs.
+ */
+export async function setDateField(
+	ctx: ActionContext,
+	identifier: string,
+	value: string,
+	opts: SetDateFieldOptions = {},
+): Promise<ActionResult<SetDateFieldResult>> {
+	const timeoutMs = resolveTimeout(opts.timeout);
+	const strategies = buildFieldStrategies(identifier, opts.scope);
+
+	return executeAction(ctx, "setDateField", opts, async (_ctx) => {
+		await waitForDomStability(_ctx.page, 200, Math.min(timeoutMs, 5000));
+		const resolution = await resolveFirstMatch(_ctx.page, strategies, timeoutMs);
+		const locator = resolution.locator.first();
+		await locator.click({ timeout: timeoutMs });
+		await locator.evaluate((el, nextValue) => {
+			const input = el as HTMLInputElement;
+			const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+			if (setter) setter.call(input, nextValue);
+			else input.value = nextValue;
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+			input.dispatchEvent(new Event("change", { bubbles: true }));
+			input.dispatchEvent(new Event("blur", { bubbles: true }));
+		}, value);
+		await locator.press("Enter", { timeout: timeoutMs }).catch(() => {});
+		await locator.press("Escape", { timeout: timeoutMs }).catch(() => {});
+		const actual = await locator.inputValue({ timeout: timeoutMs });
+		if (!actual || actual.trim().length === 0) {
+			throw new Error("setDateField: date value not applied");
+		}
+		return { fieldStrategy: resolution.strategy.type, value: actual };
 	});
 }
 
