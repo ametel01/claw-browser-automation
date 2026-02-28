@@ -269,9 +269,9 @@ describe("Semantic Actions", () => {
 			expect(await page.inputValue("#f")).toBe("skip test");
 		});
 
-	describe("selectAutocomplete", () => {
-		it("should type query and choose matching option", async () => {
-			const ctx = await setup(`
+		describe("selectAutocomplete", () => {
+			it("should type query and choose matching option", async () => {
+				const ctx = await setup(`
 				<label for="to">To</label>
 				<input id="to" aria-label="To" />
 				<ul id="options" role="listbox">
@@ -287,23 +287,23 @@ describe("Semantic Actions", () => {
 				</script>
 			`);
 
-			const result = await selectAutocomplete(ctx, "To", "Ceb", "Cebu CEB", { retries: 0 });
-			expect(result.ok).toBe(true);
-			expect(await page.inputValue('#to')).toBe('Cebu CEB');
+				const result = await selectAutocomplete(ctx, "To", "Ceb", "Cebu CEB", { retries: 0 });
+				expect(result.ok).toBe(true);
+				expect(await page.inputValue("#to")).toBe("Cebu CEB");
+			});
 		});
-	});
 
-	describe("setDateField", () => {
-		it("should set date input and dispatch events", async () => {
-			const ctx = await setup(`
+		describe("setDateField", () => {
+			it("should set date input and dispatch events", async () => {
+				const ctx = await setup(`
 				<label for="depart">Departing on</label>
 				<input id="depart" />
 			`);
 
-			const result = await setDateField(ctx, "Departing on", "16 Mar 2026", { retries: 0 });
-			expect(result.ok).toBe(true);
-			expect(await page.inputValue('#depart')).toBe('16 Mar 2026');
+				const result = await setDateField(ctx, "Departing on", "16 Mar 2026", { retries: 0 });
+				expect(result.ok).toBe(true);
+				expect(await page.inputValue("#depart")).toBe("16 Mar 2026");
+			});
 		});
-	});
 	});
 });

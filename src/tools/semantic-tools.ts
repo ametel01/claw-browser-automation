@@ -33,7 +33,6 @@ function logAction(
 
 export function createSemanticTools(ctx: SkillContext): ToolDefinition[] {
 	return [
-
 		{
 			name: "browser_select_autocomplete",
 			description:
@@ -59,9 +58,7 @@ export function createSemanticTools(ctx: SkillContext): ToolDefinition[] {
 					),
 				),
 				delayMs: Type.Optional(Type.Number({ description: "Typing delay for sequential mode" })),
-				scope: Type.Optional(
-					Type.String({ description: "CSS selector to scope field search" }),
-				),
+				scope: Type.Optional(Type.String({ description: "CSS selector to scope field search" })),
 			}),
 			async execute(params) {
 				const sessionId = params["sessionId"] as string;
@@ -102,9 +99,7 @@ export function createSemanticTools(ctx: SkillContext): ToolDefinition[] {
 					description: "Date field label, placeholder, name, or aria-label",
 				}),
 				value: Type.String({ description: "Date value to set (site-local expected format)" }),
-				scope: Type.Optional(
-					Type.String({ description: "CSS selector to scope field search" }),
-				),
+				scope: Type.Optional(Type.String({ description: "CSS selector to scope field search" })),
 			}),
 			async execute(params) {
 				const sessionId = params["sessionId"] as string;
